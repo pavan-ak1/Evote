@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="css/chatbot.css">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f4f4f4;
+            padding: 20px;
+        }
+
+        .dashboard-container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .dashboard-options button, .logout-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .dashboard-options button:hover, .logout-btn:hover {
+            background: #0056b3;
+        }
+
+        .logout-btn {
+            background: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1>Welcome to Your Dashboard</h1>
+        <div class="dashboard-options">
+            <button id="express-verification">Express Verification</button>
+            <button id="time-slot-booking">Time Slot Booking</button>
+            <button id="digital-token">Digital Token Generation</button>
+            <button id="sos">SOS</button>
+            <button id="logout" class="logout-btn">Logout</button>
+        </div>
+    </div>
+    <div id="chatbot-icon" onclick="toggleChatbot()">💬</div>
+    
+    <!-- Chatbot Popup -->
+    <div id="chatbot-container" class="hidden">
+        <div id="chat-box"></div>
+        <input type="text" id="user-input" placeholder="Ask a question...">
+        <button onclick="sendMessage()">Send</button>
+        <!-- Voice Input Button -->
+<button onclick="startVoiceInput()">🎤 Speak</button>
+
+    </div>
+
+    <script src="js/chatbot.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Check if user is authenticated
+            const token = localStorage.getItem("token");
+            if (!token) {
+                alert("Unauthorized! Please log in.");
+                window.location.href = "/login.html";
+                return;
+            }
+
+            // Redirect buttons
+            document.getElementById("express-verification").addEventListener("click", () => {
+                window.location.href = "/express-verification.html";
+            });
+
+            document.getElementById("time-slot-booking").addEventListener("click", () => {
+                window.location.href = "/time-slot.html";
+            });
+
+            document.getElementById("digital-token").addEventListener("click", () => {
+                window.location.href = "/digital-token.html";
+            });
+
+            document.getElementById("sos").addEventListener("click", () => {
+                alert("SOS Alert Sent! Emergency team will contact you.");
+            });
+
+            // Logout button functionality
+            document.getElementById("logout").addEventListener("click", () => {
+                localStorage.removeItem("token"); // Clear token
+                alert("Logged out successfully!");
+                window.location.href = "/login.html";
+            });
+        });
+    </script>
+</body>
+</html>

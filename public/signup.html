@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signup</title>
+  <style>
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Signup</h1>
+  <form id="signup-form">
+    <input type="text" id="name" placeholder="Full Name" required><br>
+    <input type="email" id="email" placeholder="Email" required><br>
+    <input type="password" id="password" placeholder="Password" required><br>
+    <input type="text" id="adharNumber" placeholder="Aadhar Number" required><br>
+    <input type="text" id="voterId" placeholder="Voter ID" required><br>
+    <input type="text" id="phoneNumber" placeholder="Phone Number (+91...)" required><br>
+    <button type="submit" id="signup-button">Signup</button>
+  </form>
+
+  <div id="verify-otp-section" class="hidden">
+    <h2>Verify Your Phone</h2>
+    <p id="phone-text"></p>
+    <input type="text" id="final-otp" placeholder="Enter OTP"><br>
+    <button id="continue-btn">Verify OTP</button>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      let phoneNumber = "";
+      let userId = "";
+      
+      const signupForm = document.getElementById("signup-form");
+      const signupButton = document.getElementById("signup-button");
+      const verifyOtpSection = document.getElementById("verify-otp-section");
+      const continueButton = document.getElementById("continue-btn");
+      
+      // Signup flow: create user then send OTP
+      signupForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const name = document.getElementById("name").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value.trim();
+        const adharNumber = document.getElementById("adharNumber").value.trim();
+        const voterId = document.getElementById("voterId").value.trim();
+        phoneNumber = document.getElementById("phoneNumber").value.trim();
+        
+        if (!name || !email || !password || !adharNumber || !voterId || !phoneNumber) {
+          alert("Please fill in all required fields.");
+          return;
+        }
+        
+        try {
+          // Create the user account
+          const response = await fetch("/auth/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password, adharNumber, phoneNumber, voterId })
+          });
+          const data = await response.json();
+          
+          if (response.ok) {
+            userId = data.userId; // Save the user ID for later use
+            
+            // Now send the OTP to the user's phone
+            const otpResponse = await fetch("/auth/send-otp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phoneNumber, userId })
+            });
+            const otpData = await otpResponse.json();
+            
+            if (otpResponse.ok) {
+              // Hide signup form and show OTP verification section
+              signupForm.classList.add("hidden");
+              verifyOtpSection.classList.remove("hidden");
+              document.getElementById("phone-text").textContent = `We've sent a text message to: ${phoneNumber}`;
+            } else {
+              alert("Failed to send OTP: " + (otpData.error || "Unknown error"));
+            }
+          } else {
+            alert("Signup failed: " + (data.error || "Unknown error"));
+          }
+        } catch (error) {
+          console.error("Signup error:", error);
+          alert("Signup error: " + error.message);
+        }
+      });
+      
+      // Final OTP verification
+      continueButton.addEventListener("click", async () => {
+        const otp = document.getElementById("final-otp").value.trim();
+        if (!otp) {
+          alert("Please enter the OTP.");
+          return;
+        }
+        continueButton.disabled = true;
+        
+        try {
+          const response = await fetch("/auth/verify-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phoneNumber, otp, userId })
+          });
+          const data = await response.json();
+          
+          if (response.ok) {
+            alert("Verification successful!");
+            window.location.href = "/dashboard.html";
+          } else {
+            alert(data.error || "Verification failed");
+          }
+        } catch (error) {
+          console.error("Error verifying OTP:", error);
+          alert("Failed to verify OTP.");
+        } finally {
+          continueButton.disabled = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>

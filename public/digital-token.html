@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Digital Token</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    .container { max-width: 500px; margin: auto; padding: 20px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); background: white; }
+    button { padding: 10px; font-size: 16px; background: #007bff; color: white; border: none; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    img { margin-top: 20px; max-width: 100%; }
+    .d-none { display: none; }
+    .spinner { margin: 20px auto; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #007bff; border-radius: 50%; animation: spin 2s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Your Digital Token</h2>
+    <p>Your QR Code is shown below. You can also download it as a PDF.</p>
+    
+    <div id="loading-spinner" class="spinner"></div>
+    
+    <div id="qr-container" class="d-none">
+      <p>Digital Token Generated:</p>
+      <img id="qr-code" src="" alt="Digital Token QR Code" />
+    </div>
+    
+    <button onclick="downloadPDF()" id="download-btn" class="d-none">Download PDF</button>
+  </div>
+
+  <script>
+    async function generateToken() {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Unauthorized! Please log in again.");
+        window.location.href = "/login.html";
+        return;
+      }
+      
+      try {
+        // Show loading spinner
+        document.getElementById("loading-spinner").classList.remove("d-none");
+        
+        const response = await axios.post("/api/digital-token/generate", {}, {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        
+        // Hide loading spinner
+        document.getElementById("loading-spinner").classList.add("d-none");
+        
+        const result = response.data;
+        if (result.qrCodeUrl) {
+          document.getElementById("qr-code").src = result.qrCodeUrl;
+          document.getElementById("qr-container").classList.remove("d-none");
+          document.getElementById("download-btn").classList.remove("d-none");
+        } else {
+          alert("Failed to generate QR code.");
+        }
+      } catch (error) {
+        // Hide loading spinner
+        document.getElementById("loading-spinner").classList.add("d-none");
+        
+        console.error("Error generating token:", error);
+        if (error.response && error.response.status === 401) {
+          alert("Session expired. Please log in again.");
+          window.location.href = "/login.html";
+        } else {
+          alert(error.response?.data?.error || "Failed to generate digital token.");
+        }
+      }
+    }
+
+    async function downloadPDF() {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Unauthorized! Please log in again.");
+        window.location.href = "/login.html";
+        return;
+      }
+      
+      try {
+        // Show loading spinner
+        document.getElementById("loading-spinner").classList.remove("d-none");
+        
+        const response = await axios.get("/api/digital-token/download", {
+          responseType: "blob",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        
+        // Hide loading spinner
+        document.getElementById("loading-spinner").classList.add("d-none");
+        
+        const blob = new Blob([response.data], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "digital_token.pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        // Hide loading spinner
+        document.getElementById("loading-spinner").classList.add("d-none");
+        
+        console.error("Error downloading PDF:", error);
+        if (error.response && error.response.status === 401) {
+          alert("Session expired. Please log in again.");
+          window.location.href = "/login.html";
+        } else {
+          alert(error.response?.data?.error || "Failed to download PDF. Please try again.");
+        }
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", generateToken);
+  </script>
+</body>
+</html>
