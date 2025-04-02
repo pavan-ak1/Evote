@@ -5,6 +5,8 @@ const User = require('../models/userModel');
 const { authMiddleware } = require('../middleware/authMiddleware');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const FaceVerificationService = require('../services/faceVerificationService');
+const faceService = new FaceVerificationService();
 
 // router.post("/verify-face", async (req, res) => {
 //     try {
@@ -171,41 +173,139 @@ router.post('/verify-token', authMiddleware, async (req, res) => {
   }
 });
 
-// Add face verification route
+// Register face
+router.post('/face/register', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const { faceImage } = req.body;
+        if (!faceImage) {
+            return res.status(400).json({ message: 'Face image is required' });
+        }
+
+        // Register face with the face verification service
+        const result = await faceService.registerFace(user.id, faceImage);
+
+        // Update user record with face image and URL
+        user.faceImage = faceImage;
+        user.faceImageUrl = result.faceImageUrl;
+        user.hasFaceRegistered = true;
+        user.faceRegisteredAt = new Date();
+        await user.save();
+
+        res.json({ 
+            success: true,
+            message: 'Face registered successfully',
+            faceImageUrl: result.faceImageUrl
+        });
+    } catch (error) {
+        console.error('Face registration error:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error registering face',
+            error: error.message 
+        });
+    }
+});
+
+// Verify face
 router.post('/face/verify', authMiddleware, async (req, res) => {
-  try {
-    const { image } = req.body;
-    if (!image) {
-      return res.status(400).json({ success: false, message: "No image received" });
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Check if face is registered
+        if (!user.hasFaceRegistered) {
+            return res.status(400).json({ message: 'Face not registered' });
+        }
+
+        // Check if verification is locked
+        if (user.isFaceVerificationLocked()) {
+            const lockTime = user.faceVerificationLockedUntil;
+            return res.status(429).json({
+                message: 'Face verification temporarily locked',
+                lockedUntil: lockTime
+            });
+        }
+
+        const { faceImage } = req.body;
+        if (!faceImage) {
+            return res.status(400).json({ message: 'Face image is required' });
+        }
+
+        // Verify face with the service
+        const verificationResult = await faceService.verifyFace(user.faceImage, faceImage);
+        
+        if (verificationResult.isMatch) {
+            // Reset verification attempts on success
+            await user.resetFaceVerificationAttempts();
+            user.lastFaceVerification = new Date();
+            await user.save();
+
+            return res.json({
+                message: 'Face verified successfully',
+                lastVerification: user.lastFaceVerification
+            });
+        } else {
+            // Increment failed attempts
+            await user.incrementFaceVerificationAttempts();
+            
+            return res.status(401).json({
+                message: 'Face verification failed',
+                attemptsRemaining: 3 - user.faceVerificationAttempts
+            });
+        }
+    } catch (error) {
+        console.error('Face verification error:', error);
+        res.status(500).json({ 
+            message: 'Error verifying face',
+            error: error.message 
+        });
     }
-    
-    console.log("Processing face verification for user:", req.user._id);
-    
-    // Store the face in the user document
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { 
-        faceEmbedding: image,
-        faceVerifiedAt: new Date() 
-      },
-      { new: true }
-    );
-    
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+});
+
+// Check face verification status
+router.get('/face/status', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.json({
+            hasFaceRegistered: user.hasFaceRegistered,
+            faceRegisteredAt: user.faceRegisteredAt,
+            lastVerification: user.lastFaceVerification,
+            isLocked: user.isFaceVerificationLocked(),
+            lockedUntil: user.faceVerificationLockedUntil,
+            attemptsRemaining: Math.max(0, 3 - user.faceVerificationAttempts)
+        });
+    } catch (error) {
+        console.error('Status check error:', error);
+        res.status(500).json({ 
+            message: 'Error checking face verification status',
+            error: error.message 
+        });
     }
-    
-    console.log("Face registered successfully for user:", user._id);
-    
-    return res.status(200).json({
-      success: true,
-      message: "Face registered successfully!",
-      userId: user._id
-    });
-  } catch (error) {
-    console.error("Face verification error:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
+});
+
+// Check face verification service health
+router.get('/face/health', async (req, res) => {
+    try {
+        const health = await faceService.checkHealth();
+        res.status(200).json(health);
+    } catch (error) {
+        console.error('Health check error:', error);
+        res.status(500).json({ 
+            message: 'Error checking face verification service health',
+            error: error.message 
+        });
+    }
 });
 
 module.exports = router;

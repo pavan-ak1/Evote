@@ -126,14 +126,15 @@
       slotsContainer.innerHTML = `<p class="loading">Loading slots...</p>`;
       try {
         const token = localStorage.getItem("token"); // Get JWT token
-        // Use backticks for your URL and Bearer token
-        const response = await fetch(`/api/timeslots/available?date=${date}`, {
+        // Use correct endpoint for time slots
+        const response = await fetch(`/api/slots/available?date=${date}`, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
         if (!response.ok) throw new Error("Failed to fetch time slots.");
         const slots = await response.json();
+        console.log("Fetched slots:", slots); // Debug logging
         displaySlots(slots);
       } catch (error) {
         console.error("Error fetching slots:", error);
@@ -191,7 +192,7 @@
 
       try {
         const token = localStorage.getItem("token"); // Get JWT token
-        const response = await fetch("/api/timeslots/book", {
+        const response = await fetch("/api/slots/book", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -229,7 +230,7 @@
       try {
         const token = localStorage.getItem("token");
         // The backend returns an array, either empty or [oneSlot]
-        const response = await fetch(`/api/timeslots/booked`, {
+        const response = await fetch(`/api/slots/booked`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!response.ok) throw new Error("Failed to fetch booked slots.");

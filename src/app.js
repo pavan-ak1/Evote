@@ -15,13 +15,16 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Static files - moved before API routes
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Import routes
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
-const slotRoutes = require("./routes/slotRoutes");
+const slotRoutes = require("./routes/timeSlotRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const digitalTokenRoutes = require("./routes/digitalTokenRoutes");
-const expressRoutes = require("./routes/expressRoutes");
+const expressRoutes = require("./routes/voterRoutes");
 const chatbotRoutes = require("./routes/chatbotRoutes");
 
 // Mount routes
@@ -29,17 +32,25 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/slots', slotRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/tokens', digitalTokenRoutes);
-app.use('/api/express', expressRoutes);
+app.use('/api/digital-token', digitalTokenRoutes);
+app.use('/voter', expressRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 
-// Static files
-app.use(express.static(path.join(__dirname, '../public')));
+// Add backward compatibility routes
+app.use('/admin', adminRoutes);
+app.use('/auth', authRoutes);
+app.use('/api/timeslots', slotRoutes);
+app.use('/timeslots', slotRoutes);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting')
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  connectTimeoutMS: 30000,
+  socketTimeoutMS: 45000
+})
+.then(() => console.log('MongoDB connected in app.js'))
+.catch(err => console.error('MongoDB connection error in app.js:', err));
 
 // Default route
 app.get('*', (req, res) => {

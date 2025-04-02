@@ -23,20 +23,27 @@ exports.generateDigitalToken = async (req, res) => {
     const bookedSlot = user.timeSlot;
     console.log("Found Booked Slot:", bookedSlot);
 
-    // Prepare data for the QR code
+    // Prepare data for the QR code - use a consistent format with just essential data
     const qrData = JSON.stringify({
-      voterId,
-      date: bookedSlot.date,
-      startTime: bookedSlot.startTime,
-      endTime: bookedSlot.endTime,
-      slotId: bookedSlot._id
+      voterId: voterId,
+      slotId: bookedSlot._id.toString()
     });
 
-    // Generate QR code URL
+    console.log("QR Data prepared:", qrData);
+
+    // Generate QR code URL with better options for clearer QR code
     let qrCodeUrl;
     try {
-      qrCodeUrl = await QRCode.toDataURL(qrData);
-      console.log("QR code generated successfully");
+      qrCodeUrl = await QRCode.toDataURL(qrData, {
+        errorCorrectionLevel: 'H', // High error correction for better scanning
+        margin: 2,
+        scale: 8,
+        color: {
+          dark: '#000000',  // Black dots
+          light: '#ffffff' // White background
+        }
+      });
+      console.log("QR code generated successfully with length:", qrCodeUrl.length);
     } catch (error) {
       console.error("Error generating QR code:", error);
       return res.status(500).json({ error: "Failed to generate QR code" });
@@ -50,6 +57,9 @@ exports.generateDigitalToken = async (req, res) => {
       existingToken.slotId = bookedSlot._id;
       existingToken.qrCode = qrCodeUrl;
       existingToken.token = qrData;
+      if (user.phoneNumber) {
+        existingToken.phoneNumber = user.phoneNumber;
+      }
       await existingToken.save();
       console.log("Updated existing digital token:", existingToken._id);
     } else {
@@ -58,7 +68,8 @@ exports.generateDigitalToken = async (req, res) => {
         voterId: voterId,
         slotId: bookedSlot._id,
         qrCode: qrCodeUrl,
-        token: qrData
+        token: qrData,
+        phoneNumber: user.phoneNumber
       });
       await newToken.save();
       console.log("New digital token created:", newToken._id);
@@ -160,19 +171,32 @@ exports.verifyDigitalToken = async (req, res) => {
       // Try to parse if it's a JSON string
       let voterId = null;
       try {
-        if (typeof tokenData === 'string' && tokenData.startsWith('{')) {
-          const parsed = JSON.parse(tokenData);
-          voterId = parsed.voterId;
+        if (typeof tokenData === 'string') {
+          try {
+            const parsed = JSON.parse(tokenData);
+            voterId = parsed.voterId;
+          } catch (e) {
+            console.error("Not a valid JSON string, treating as direct ID");
+            voterId = tokenData;
+          }
+        } else if (typeof tokenData === 'object') {
+          voterId = tokenData.voterId;
         }
       } catch (e) {
         console.error("Error parsing token:", e);
       }
       
-      // Find the token in the database
+      if (!voterId) {
+        return res.status(400).json({ error: "Invalid token format: Cannot extract voter ID" });
+      }
+      
+      console.log("Extracted voter ID for verification:", voterId);
+      
+      // Find the token in the database using various queries
       const token = await DigitalToken.findOne({ 
         $or: [
-          { token: tokenData },
-          ...(voterId ? [{ voterId }] : [])
+          { token: typeof tokenData === 'string' ? tokenData : JSON.stringify(tokenData) },
+          { voterId: voterId }
         ] 
       });
       

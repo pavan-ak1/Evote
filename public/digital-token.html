@@ -3,121 +3,276 @@
 <head>
   <meta charset="UTF-8">
   <title>Digital Token</title>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-    .container { max-width: 500px; margin: auto; padding: 20px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); background: white; }
-    button { padding: 10px; font-size: 16px; background: #007bff; color: white; border: none; cursor: pointer; }
-    button:hover { background: #0056b3; }
-    img { margin-top: 20px; max-width: 100%; }
-    .d-none { display: none; }
-    .spinner { margin: 20px auto; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #007bff; border-radius: 50%; animation: spin 2s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background-color: #f5f5f5;
+      padding: 20px;
+    }
+    .container { 
+      max-width: 500px; 
+      margin: 50px auto; 
+      padding: 30px; 
+      border-radius: 10px; 
+      box-shadow: 0px 0px 20px rgba(0,0,0,0.1); 
+      background: white; 
+    }
+    .btn-primary {
+      background: #160C56;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 15px;
+    }
+    .btn-primary:hover {
+      background: #0d084a;
+    }
+    .qr-container {
+      text-align: center;
+      margin: 20px 0;
+      padding: 15px;
+      border: 2px dashed #ddd;
+      border-radius: 10px;
+      background-color: #f9f9f9;
+    }
+    .qr-image {
+      max-width: 250px;
+      margin: 0 auto;
+      display: block;
+    }
+    .loading-spinner {
+      display: inline-block;
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      border-top-color: #3498db;
+      animation: spin 1s ease-in-out infinite;
+      margin: 30px auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .alert {
+      margin-top: 20px;
+    }
+    .voter-info {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 10px;
+      background-color: #f0f0f0;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>Your Digital Token</h2>
-    <p>Your QR Code is shown below. You can also download it as a PDF.</p>
-    
-    <div id="loading-spinner" class="spinner"></div>
-    
-    <div id="qr-container" class="d-none">
-      <p>Digital Token Generated:</p>
-      <img id="qr-code" src="" alt="Digital Token QR Code" />
+    <div class="text-center mb-4">
+      <h2>Your Digital Voting Token</h2>
+      <p class="text-muted">This QR code is your unique digital token. Please download it and bring it to the polling station.</p>
+    </div>
+
+    <div id="loading-container" class="text-center">
+      <div class="loading-spinner"></div>
+      <p>Generating your digital token...</p>
     </div>
     
-    <button onclick="downloadPDF()" id="download-btn" class="d-none">Download PDF</button>
+    <div id="error-container" class="alert alert-danger d-none">
+      <p id="error-message">An error occurred while generating your digital token.</p>
+      <button class="btn btn-outline-primary btn-sm" onclick="generateToken()">Try Again</button>
+    </div>
+
+    <div id="qr-container" class="d-none">
+      <div class="qr-container">
+        <img id="qr-code" src="" alt="Digital Token QR Code" class="qr-image" />
+      </div>
+      
+      <div class="voter-info">
+        <div id="voter-details">
+          <!-- Voter details will be populated dynamically -->
+        </div>
+      </div>
+      
+      <div class="text-center mt-4">
+        <button onclick="downloadPDF()" id="download-btn" class="btn btn-primary">
+          <i class="bi bi-download"></i> Download PDF
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
+    // Helper function to display error messages
+    function showError(message) {
+      document.getElementById("loading-container").classList.add("d-none");
+      document.getElementById("error-container").classList.remove("d-none");
+      document.getElementById("error-message").textContent = message || "An error occurred. Please try again.";
+    }
+
+    // Helper function to display the QR code
+    function showQRCode(qrCodeUrl, userData) {
+      document.getElementById("loading-container").classList.add("d-none");
+      document.getElementById("error-container").classList.add("d-none");
+      document.getElementById("qr-container").classList.remove("d-none");
+      
+      // Set QR code image
+      const qrImg = document.getElementById("qr-code");
+      qrImg.src = qrCodeUrl;
+      qrImg.alt = "Digital Token for " + (userData?.name || "Voter");
+      
+      // Add event listener for QR code image loading
+      qrImg.onload = function() {
+        console.log("QR code image loaded successfully");
+      };
+      
+      qrImg.onerror = function() {
+        console.error("Error loading QR code image");
+        showError("Failed to load QR code image. Please try again.");
+      };
+      
+      // Set voter details
+      const voterDetailsElement = document.getElementById("voter-details");
+      if (userData) {
+        // Format time slot information
+        let timeSlotText = 'Not Booked';
+        if (userData.timeSlot) {
+          try {
+            // Parse the date string and format it
+            const date = new Date(userData.timeSlot.date);
+            if (!isNaN(date.getTime())) { // Check if date is valid
+              const formattedDate = date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              });
+              const startTime = userData.timeSlot.startTime || 'N/A';
+              timeSlotText = `${formattedDate} at ${startTime}`;
+            } else {
+              console.error('Invalid date:', userData.timeSlot.date);
+              timeSlotText = 'Not Booked';
+            }
+          } catch (error) {
+            console.error('Error formatting date:', error);
+            timeSlotText = 'Not Booked';
+          }
+        }
+        
+        voterDetailsElement.innerHTML = `
+          <h5 class="mb-3">Voter Information</h5>
+          <div><strong>Name:</strong> ${userData.name || 'N/A'}</div>
+          <div><strong>Voter ID:</strong> ${userData.voterId || userData._id || 'N/A'}</div>
+          <div><strong>Phone:</strong> ${userData.phoneNumber || 'N/A'}</div>
+          <div><strong>Time Slot:</strong> ${timeSlotText}</div>
+        `;
+      }
+    }
+
     async function generateToken() {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Unauthorized! Please log in again.");
-        window.location.href = "/login.html";
+        showError("You are not logged in. Please log in first.");
+        setTimeout(() => {
+          window.location.href = "/login.html";
+        }, 2000);
         return;
       }
       
       try {
         // Show loading spinner
-        document.getElementById("loading-spinner").classList.remove("d-none");
+        document.getElementById("loading-container").classList.remove("d-none");
+        document.getElementById("error-container").classList.add("d-none");
+        document.getElementById("qr-container").classList.add("d-none");
         
-        const response = await axios.post("/api/digital-token/generate", {}, {
+        // Fetch user data first
+        const userResponse = await fetch("/api/user/profile", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        
+        if (!userResponse.ok) {
+          throw new Error("Failed to fetch user profile");
+        }
+        
+        const userData = await userResponse.json();
+        
+        // Generate token
+        const response = await fetch("/api/digital-token/generate", {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
           }
         });
         
-        // Hide loading spinner
-        document.getElementById("loading-spinner").classList.add("d-none");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to generate digital token");
+        }
         
-        const result = response.data;
+        const result = await response.json();
         if (result.qrCodeUrl) {
-          document.getElementById("qr-code").src = result.qrCodeUrl;
-          document.getElementById("qr-container").classList.remove("d-none");
-          document.getElementById("download-btn").classList.remove("d-none");
+          showQRCode(result.qrCodeUrl, userData);
         } else {
-          alert("Failed to generate QR code.");
+          throw new Error("No QR code URL in response");
         }
       } catch (error) {
-        // Hide loading spinner
-        document.getElementById("loading-spinner").classList.add("d-none");
-        
         console.error("Error generating token:", error);
-        if (error.response && error.response.status === 401) {
-          alert("Session expired. Please log in again.");
-          window.location.href = "/login.html";
-        } else {
-          alert(error.response?.data?.error || "Failed to generate digital token.");
-        }
+        showError(error.message || "Failed to generate digital token");
       }
     }
 
     async function downloadPDF() {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Unauthorized! Please log in again.");
-        window.location.href = "/login.html";
+        showError("You are not logged in. Please log in first.");
+        setTimeout(() => {
+          window.location.href = "/login.html";
+        }, 2000);
         return;
       }
       
       try {
-        // Show loading spinner
-        document.getElementById("loading-spinner").classList.remove("d-none");
+        // Show loading state
+        const downloadBtn = document.getElementById("download-btn");
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = "Generating PDF...";
         
-        const response = await axios.get("/api/digital-token/download", {
-          responseType: "blob",
-          headers: { "Authorization": `Bearer ${token}` }
+        const response = await fetch("/api/tokens/download", {
+          method: "GET",
+          headers: { 
+            "Authorization": `Bearer ${token}` 
+          }
         });
         
-        // Hide loading spinner
-        document.getElementById("loading-spinner").classList.add("d-none");
+        if (!response.ok) {
+          throw new Error("Failed to download PDF");
+        }
         
-        const blob = new Blob([response.data], { type: "application/pdf" });
+        // Convert response to blob
+        const blob = await response.blob();
+        
+        // Create a temporary link and trigger download
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
         a.download = "digital_token.pdf";
         document.body.appendChild(a);
         a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } catch (error) {
-        // Hide loading spinner
-        document.getElementById("loading-spinner").classList.add("d-none");
         
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Reset button
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = '<i class="bi bi-download"></i> Download PDF';
+      } catch (error) {
         console.error("Error downloading PDF:", error);
-        if (error.response && error.response.status === 401) {
-          alert("Session expired. Please log in again.");
-          window.location.href = "/login.html";
-        } else {
-          alert(error.response?.data?.error || "Failed to download PDF. Please try again.");
-        }
+        showError("Failed to download PDF. Please try again.");
       }
     }
 
+    // Initialize when the page loads
     document.addEventListener("DOMContentLoaded", generateToken);
   </script>
 </body>

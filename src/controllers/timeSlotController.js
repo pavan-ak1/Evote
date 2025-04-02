@@ -38,8 +38,25 @@ exports.getAvailableSlots = async (req, res) => {
   try {
     const { date } = req.query;
     console.log("getAvailableSlots called with date =", date); // Debug log
-    const slots = await TimeSlot.find({ date });
+    
+    // If no date provided, return all slots
+    let query = {};
+    if (date) {
+      // Format the date to match the stored format (YYYY-MM-DD)
+      const formattedDate = moment(date).format('YYYY-MM-DD');
+      query.date = formattedDate;
+    }
+    
+    // Find all slots matching the query
+    const slots = await TimeSlot.find(query);
     console.log("Slots found in DB:", slots); // Debug log
+    
+    // If no slots found, return empty array
+    if (!slots || slots.length === 0) {
+      console.log("No slots found for date:", date);
+      return res.json([]);
+    }
+    
     res.json(slots);
   } catch (error) {
     console.error("Error in getAvailableSlots:", error);
@@ -151,8 +168,23 @@ exports.getBookedSlot = async (req, res) => {
       return res.status(200).json([]);
     }
     
+    // Format the date and time to ensure proper display
+    const slot = user.timeSlot.toObject();
+    if (slot.date) {
+      // Format date as YYYY-MM-DD
+      slot.date = moment(slot.date).format('YYYY-MM-DD');
+    }
+    if (slot.startTime) {
+      // Format time as HH:mm A
+      slot.startTime = moment(slot.startTime, 'HH:mm').format('hh:mm A');
+    }
+    if (slot.endTime) {
+      // Format time as HH:mm A
+      slot.endTime = moment(slot.endTime, 'HH:mm').format('hh:mm A');
+    }
+    
     // Return an array with a single slot object
-    res.status(200).json([user.timeSlot]);
+    res.status(200).json([slot]);
   } catch (error) {
     console.error("Error fetching booked slot:", error);
     res.status(500).json({ error: error.message });

@@ -3,9 +3,26 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/userModel');
 const { authMiddleware } = require('../middleware/authMiddleware');
+const axios = require('axios');
+const cloudinary = require('cloudinary');
 
 // Add Python server URL configuration
-const PYTHON_SERVER_URL = process.env.PYTHON_SERVER_URL || 'http://localhost:5001';
+const PYTHON_SERVER_URL = process.env.PYTHON_SERVER_URL || 'http://localhost:5000';
+
+// Health check endpoint for the face verification service
+router.get('/face-verification/health', authMiddleware, async (req, res) => {
+  try {
+    const response = await axios.get(`${PYTHON_SERVER_URL}/health`);
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error("Health check error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error checking face verification service health",
+      error: error.message 
+    });
+  }
+});
 
 // New simplified face verification endpoint with Voter ID verification
 router.post('/face-verification', authMiddleware, async (req, res) => {
@@ -35,16 +52,33 @@ router.post('/face-verification', authMiddleware, async (req, res) => {
         message: "Voter ID verification failed. Please ensure you've entered your correct Voter ID." 
       });
     }
-    
-    // Store the face image in the user document
-    user.faceEmbedding = image;
-    user.faceVerifiedAt = new Date();
-    await user.save();
 
-    return res.status(200).json({ 
-      success: true, 
-      message: "Face registered successfully!" 
-    });
+    // Upload face image to Cloudinary
+    try {
+      const uploadResponse = await cloudinary.uploader.upload(image, {
+        folder: 'face-registration',
+        resource_type: 'auto'
+      });
+
+      // Update user with face registration details
+      user.faceImageUrl = uploadResponse.secure_url;
+      user.hasFaceRegistered = true;
+      user.faceRegisteredAt = new Date();
+      user.faceVerifiedAt = null; // Reset verification status
+      await user.save();
+
+      return res.status(200).json({ 
+        success: true, 
+        message: "Face registered successfully!",
+        faceImageUrl: uploadResponse.secure_url
+      });
+    } catch (uploadError) {
+      console.error("Error uploading face image:", uploadError);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Error uploading face image" 
+      });
+    }
   } catch (error) {
     console.error("Face Verification Error:", error);
     res.status(500).json({ success: false, message: "Server error" });

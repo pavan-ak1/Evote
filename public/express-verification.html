@@ -89,6 +89,7 @@
     
     async function startCamera() {
       try {
+        console.log('Starting camera...');
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             width: { ideal: 640 },
@@ -97,48 +98,91 @@
           } 
         });
         document.getElementById('video').srcObject = stream;
+        console.log('Camera started successfully');
       } catch (err) {
+        console.error('Camera error:', err);
         showStatus(`Camera error: ${err.message}`, false);
       }
     }
 
     async function captureAndRegister() {
       try {
+        console.log('Starting face capture and registration...');
+        
         // Get authentication token
         const token = localStorage.getItem('token');
         if (!token) {
+          console.error('No authentication token found');
           showStatus('You are not logged in. Please log in first.', false);
           return;
         }
+        console.log('Authentication token found');
 
-        // Capture frame to canvas
+        // Get user ID from token
+        const userData = JSON.parse(atob(token.split('.')[1]));
+        const userId = userData.userId;
+        console.log('User ID from token:', userId);
+
+        // Capture image from video
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const context = canvas.getContext('2d');
+        
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw video frame on canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Get image data as base64
+        const imageData = canvas.toDataURL('image/jpeg');
+        console.log('Image captured, length:', imageData.length);
 
-        // Convert canvas to base64
-        const imageBase64 = canvas.toDataURL('image/png');
-
-        // Show loading status
-        showStatus('Processing your face image...', null);
-
-        // Send to server
-        const response = await fetch('/api/face/verify', {
+        // Send to face verification server
+        const response = await fetch('http://localhost:3000/voter/face/register', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ 
-            image: imageBase64
+          body: JSON.stringify({
+            userId: userId,
+            faceImage: imageData
           })
         });
 
-        const data = await response.json();
+        // Log response details for debugging
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        // Get response text first for debugging
+        const responseText = await response.text();
+        console.log('Face registration raw response:', responseText);
+        
+        // Parse the JSON response
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (err) {
+          console.error('Error parsing response JSON:', err);
+          console.error('Response was not JSON:', responseText);
+          showStatus('Error processing server response. Please try again.', false);
+          return;
+        }
         
         if (response.ok && data.success) {
+          console.log('Face registration successful');
+          
+          // Store the face embedding in localStorage
+          if (data.embedding) {
+            localStorage.setItem('faceEmbedding', JSON.stringify(data.embedding));
+          }
+          
           showStatus('Face registered successfully! You can now proceed to generate your digital token.', true);
+          
+          // Store face registration status in localStorage
+          localStorage.setItem('faceRegistered', 'true');
           
           // Add a button to navigate to the digital token page
           setTimeout(() => {
@@ -146,6 +190,7 @@
             statusElement.innerHTML += '<br><br><a href="/digital-token.html" class="btn btn-primary">Generate Digital Token</a>';
           }, 1000);
         } else {
+          console.error('Face registration failed:', data.message || 'Unknown error');
           showStatus(data.message || 'Error registering face', false);
         }
       } catch (error) {

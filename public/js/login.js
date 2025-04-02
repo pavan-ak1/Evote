@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const password = document.getElementById("password").value;
   
       try {
-        const response = await fetch("/api/login", {
+        const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
@@ -16,9 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
   
         if (response.ok) {
           localStorage.setItem("token", result.token);
-          localStorage.setItem("voterId", result.user.voterId || result.userId);
-          localStorage.setItem("phoneNumber", result.user.phoneNumber || result.phoneNumber);
-          window.location.href = "/voter/dashboard"; // Redirect to voter dashboard route
+          localStorage.setItem("voterId", result.user ? result.user.voterId : result.userId);
+          localStorage.setItem("phoneNumber", result.user ? result.user.phoneNumber : result.phoneNumber);
+          window.location.href = "/dashboard.html"; // Direct to dashboard.html
         } else {
           alert(result.error || result.message || "Login failed. Please check your credentials.");
         }

@@ -1,7 +1,0 @@
-flask==2.0.1
-requests==2.27.1
-python-dotenv==0.19.2
-werkzeug==2.0.1
-numpy==1.24.3
-opencv-python==4.8.0.74
-Pillow==9.5.0 

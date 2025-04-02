@@ -4,57 +4,217 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scan Digital Token</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .scanner-container {
+            margin: 20px 0;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #qr-reader {
+            width: 100%;
+            background: #fff;
+        }
+        #qr-reader img {
+            width: 100%;
+        }
+        .results-container {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .or-divider {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .or-divider:before, .or-divider:after {
+            content: "";
+            flex: 1;
+            border-bottom: 1px solid #ddd;
+        }
+        .or-divider-text {
+            padding: 0 10px;
+            color: #999;
+        }
+        .btn-primary {
+            background: #160C56;
+            border: none;
+        }
+        .btn-primary:hover {
+            background: #0d084a;
+        }
+    </style>
 </head>
 <body>
-    <h2>Scan Digital Token QR Code</h2>
-    <video id="camera-preview" width="300" height="300" autoplay></video>
-    <canvas id="qr-canvas" hidden></canvas>
-    <p id="result"></p>
+    <div class="container">
+        <h2 class="text-center mb-4">Scan Digital Token</h2>
+        
+        <div class="scanner-container">
+            <div id="qr-reader"></div>
+        </div>
+        
+        <div class="or-divider">
+            <span class="or-divider-text">OR</span>
+        </div>
+        
+        <div class="manual-entry mb-4">
+            <div class="form-group mb-3">
+                <label for="tokenInput" class="form-label">Enter Token Data Manually</label>
+                <textarea id="tokenInput" class="form-control" placeholder="Paste token data here" rows="3"></textarea>
+            </div>
+            <div class="form-group mb-3">
+                <label for="voterIdInput" class="form-label">Enter Voter ID for Verification</label>
+                <input type="text" id="voterIdInput" class="form-control" placeholder="Enter the voter ID">
+                <small class="form-text text-muted">This is required for token verification</small>
+            </div>
+            <button id="verifyBtn" class="btn btn-primary mt-2">Verify Token</button>
+        </div>
+        
+        <div id="results-container" class="results-container d-none">
+            <h4 class="mb-3">Verification Results</h4>
+            <div class="alert" id="status-message" role="alert"></div>
+            
+            <div id="voter-details" class="d-none">
+                <h5>Voter Information</h5>
+                <div class="mb-2"><strong>Name:</strong> <span id="voterName"></span></div>
+                <div class="mb-2"><strong>Voter ID:</strong> <span id="voterId"></span></div>
+                <div class="mb-2"><strong>Phone:</strong> <span id="voterPhone"></span></div>
+                <div class="mb-2"><strong>Time Slot:</strong> <span id="voterSlot"></span></div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const video = document.getElementById("camera-preview");
-        const canvas = document.getElementById("qr-canvas");
-        const ctx = canvas.getContext("2d");
-
-        async function startScanner() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                video.srcObject = stream;
-                scanQRCode();
-            } catch (error) {
-                alert("Camera access denied.");
-            }
-        }
-
-        function scanQRCode() {
-            const interval = setInterval(() => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-                if (code) {
-                    clearInterval(interval);
-                    verifyToken(code.data);
-                }
-            }, 1000);
-        }
-
-        async function verifyToken(digitalToken) {
-            const response = await fetch("http://localhost:5000/api/digital-token/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ digitalToken })
+        document.addEventListener('DOMContentLoaded', function() {
+            const html5QrCode = new Html5Qrcode("qr-reader");
+            const qrConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            // Start scanning
+            html5QrCode.start(
+                { facingMode: "environment" },
+                qrConfig,
+                onScanSuccess,
+                onScanFailure
+            ).catch(err => {
+                console.error("Error starting QR scanner:", err);
+                showStatus("error", "Camera access denied or not available. Please use manual entry.");
             });
-
-            const data = await response.json();
-            document.getElementById("result").innerText = data.message || "Invalid Token";
-        }
-
-        startScanner();
+            
+            // Handle scan success
+            function onScanSuccess(decodedText) {
+                console.log("QR code scanned:", decodedText);
+                
+                // Stop scanning
+                html5QrCode.stop().then(() => {
+                    console.log("QR scanner stopped");
+                }).catch(err => {
+                    console.error("Error stopping scanner:", err);
+                });
+                
+                // Verify token
+                verifyToken(decodedText);
+            }
+            
+            // Handle scan failure
+            function onScanFailure(error) {
+                // Just log the error, no need to show it to the user
+                console.warn(`QR scanning error: ${error}`);
+            }
+            
+            // Handle manual verification
+            document.getElementById('verifyBtn').addEventListener('click', function() {
+                const tokenData = document.getElementById('tokenInput').value.trim();
+                const voterIdInput = document.getElementById('voterIdInput').value.trim();
+                if (tokenData && voterIdInput) {
+                    verifyToken(tokenData);
+                } else {
+                    showStatus("warning", "Please enter both token data and voter ID");
+                }
+            });
+            
+            // Verify token with server
+            async function verifyToken(tokenData) {
+                try {
+                    showStatus("info", "Verifying token...");
+                    
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                        showStatus("danger", "Not authorized. Please log in first.");
+                        return;
+                    }
+                    
+                    const response = await fetch("/api/admin/read-qr", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ 
+                            tokenData,
+                            voterId: voterIdInput
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!response.ok) {
+                        showStatus("danger", result.error || "Invalid token");
+                        return;
+                    }
+                    
+                    if (result.success) {
+                        showStatus("success", "Token verified successfully!");
+                        displayVoterInfo(result.user, result.token);
+                    } else {
+                        showStatus("danger", result.message || "Token verification failed");
+                    }
+                } catch (error) {
+                    console.error("Error verifying token:", error);
+                    showStatus("danger", "Error verifying token. Please try again.");
+                }
+            }
+            
+            // Display status message
+            function showStatus(type, message) {
+                const statusElement = document.getElementById('status-message');
+                statusElement.className = `alert alert-${type}`;
+                statusElement.textContent = message;
+                document.getElementById('results-container').classList.remove('d-none');
+            }
+            
+            // Display voter information
+            function displayVoterInfo(user, token) {
+                if (!user) return;
+                
+                document.getElementById('voter-details').classList.remove('d-none');
+                document.getElementById('voterName').textContent = user.name || 'N/A';
+                document.getElementById('voterId').textContent = user.voterId || user._id || 'N/A';
+                document.getElementById('voterPhone').textContent = user.phoneNumber || 'N/A';
+                
+                // Format time slot
+                let slotText = 'Not Booked';
+                if (user.timeSlot) {
+                    const date = new Date(user.timeSlot.date).toLocaleDateString();
+                    slotText = `${date} at ${user.timeSlot.startTime}`;
+                }
+                document.getElementById('voterSlot').textContent = slotText;
+            }
+        });
     </script>
 </body>
 </html>

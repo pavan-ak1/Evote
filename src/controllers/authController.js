@@ -7,7 +7,7 @@ const bcrypt = require('bcrypt');
 const accountSid = 'AC4a77cf305a2524932ee4b63f89792ebd';
 const authToken = '825b4667ed49063ff9d16c984420b6b6';
 const twilioPhoneNumber = '+19787231027';
-const jwtSecret = 'a95a996b6508abb29bfd9e47c0a4b4033aa7baae4a35ecce1aed4e90456ddde3bb771abbb1168501bd351ffbe40edfac5f9bc142556fa5f3929e3691b420cab3d595c84c2fa352f851692b825235c127a24a7b4212cc635b76186001e7f3c7f6cd09bc45e9b0a8ed775b7510ba5d1cc79e0091d26ffbd4d2975e3ca96fbfbf2b51f2fe26874a97e23394599791bf6378ca0189e47e67fe3a42342f08d27d7c87df80d742ba81defa4d2924d3e936b5df45b44f8509bc91dc8758e318e785b222c16f09a0ed7ca1ee10f962a4e829e1c8db9ac1e0f5b812c6b8ac78d290bc6c761b155b456e497d77ee21e1898e7074228192b9634029bb2494d2cde3d0ac9fb7';
+const jwtSecret = process.env.JWT_SECRET || 'a95a996b6508abb29bfd9e47c0a4b4033aa7baae4a35ecce1aed4e90456ddde3bb771abbb1168501bd351ffbe40edfac5f9bc142556fa5f3929e3691b420cab3d595c84c2fa352f851692b825235c127a24a7b4212cc635b76186001e7f3c7f6cd09bc45e9b0a8ed775b7510ba5d1cc79e0091d26ffbd4d2975e3ca96fbfbf2b51f2fe26874a97e23394599791bf6378ca0189e47e67fe3a42342f08d27d7c87df80d742ba81defa4d2924d3e936b5df45b44f8509bc91dc8758e318e785b222c16f09a0ed7ca1ee10f962a4e829e1c8db9ac1e0f5b812c6b8ac78d290bc6c761b155b456e497d77ee21e1898e7074228192b9634029bb2494d2cde3d0ac9fb7';
 
 const client = new twilio(accountSid, authToken);
 const otps = {};
@@ -18,12 +18,35 @@ const signup = async (req, res) => {
 
         const { name, email, password, adharNumber, phoneNumber, voterId } = req.body;
 
-        if (!password) {
-            return res.status(400).json({ error: "Password is required" });
+        // Validate required fields
+        if (!email || !password || !phoneNumber) {
+            return res.status(400).json({ error: "Email, password, and phone number are required" });
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ 
+            $or: [
+                { email },
+                { phoneNumber },
+                { adharNumber },
+                { voterId }
+            ]
+        });
+
+        if (existingUser) {
+            let duplicateField = '';
+            if (existingUser.email === email) duplicateField = 'email';
+            else if (existingUser.phoneNumber === phoneNumber) duplicateField = 'phone number';
+            else if (existingUser.adharNumber === adharNumber) duplicateField = 'Aadhar number';
+            else if (existingUser.voterId === voterId) duplicateField = 'voter ID';
+            
+            return res.status(400).json({ 
+                error: `User with this ${duplicateField} already exists` 
+            });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        console.log('Hashed Password:', hashedPassword); // Log hashed password
+        console.log('Hashed Password:', hashedPassword);
 
         const user = new User({ 
             name, 
@@ -32,14 +55,21 @@ const signup = async (req, res) => {
             adharNumber, 
             phoneNumber, 
             voterId, 
-            phoneNumberVerified: false 
+            phoneNumberVerified: true // Set to true by default since we're not using OTP
         });
 
         await user.save();
-        res.status(201).json({ message: 'Signup successful. Please verify OTP.' });
+        
+        res.status(201).json({ 
+            message: 'Signup successful. You can now login.',
+            userId: user._id
+        });
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).json({ error: error.message });
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Signup failed. Please try again later." });
     }
 };
 
@@ -148,23 +178,39 @@ const verifyOTPAndGetUID = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password are required" });
+        }
+
         const user = await User.findOne({ email }).select('+password');
-        if (!user || !user.password) {
-            return res.status(401).json({ error: "Invalid Credentials" });
+        
+        if (!user) {
+            return res.status(401).json({ error: "User not found" });
         }
+
+        if (!user.password) {
+            return res.status(401).json({ error: "Invalid user account configuration" });
+        }
+
         const passwordMatch = await bcrypt.compare(password, user.password);
+        
         if (!passwordMatch) {
-            return res.status(401).json({ error: "Invalid Credentials" });
+            return res.status(401).json({ error: "Invalid password" });
         }
-        const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '1h' });
+
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        
         res.status(200).json({ 
             token,
             userId: user._id.toString(),
             phoneNumber: user.phoneNumber,
-            isAdmin: user.isAdmin
+            isAdmin: user.isAdmin,
+            name: user.name
         });
     } catch (err) {
-        res.status(500).json({ error: "Login failed" });
+        console.error('Login error:', err);
+        res.status(500).json({ error: "Login failed. Please try again later." });
     }
 };
 
@@ -192,7 +238,7 @@ const adminLogin = async (req, res) => {
         const token = jwt.sign({ 
             userId: user._id,
             isAdmin: true 
-        }, jwtSecret, { expiresIn: '1h' });
+        }, process.env.JWT_SECRET, { expiresIn: '1h' });
         
         console.log('Admin login successful, token generated');
         
