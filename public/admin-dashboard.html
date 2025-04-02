@@ -177,6 +177,12 @@
                                 Face Verification
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-section="ai-assistant">
+                                <i class="bi bi-robot me-2"></i>
+                                AI Assistant
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </nav>
@@ -378,13 +384,34 @@
                                             <div id="matchProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                                         </div>
                                         
-                                        <div class="mt-4 d-flex justify-content-between">
-                                            <button id="allowVoterBtn" class="btn btn-success">Allow Voter</button>
-                                            <button id="denyVoterBtn" class="btn btn-danger">Deny Voter</button>
+                                        <div id="verificationActions" class="mt-4 text-center" style="display: none;">
+                                            <button id="continueToVotingBtn" class="btn btn-success">
+                                                <i class="bi bi-check-circle"></i> Continue to Voting
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Assistant Section -->
+                <div class="content-section" id="ai-assistant-section">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">AI Assistant</h1>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <div class="chat-container" style="height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 5px; padding: 15px; margin-bottom: 15px;">
+                            <div id="chat-messages" class="mb-3"></div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <input type="text" id="user-input" class="form-control" placeholder="Ask a question...">
+                            <button class="btn btn-primary" id="send-message">
+                                <i class="bi bi-send"></i> Send
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -414,6 +441,7 @@
             initializeNavigation();
             initializeQRScanner();
             initializeFaceVerification();
+            initializeAIAssistant();
             
             // Logout button
             document.getElementById('logoutBtn').addEventListener('click', function() {
@@ -967,30 +995,37 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                     const verificationData = await verificationResponse.json();
                     console.log('Verification response:', verificationData);
                     
-                    // Update match percentage display
-                    const matchPercentageElement = document.getElementById('matchPercentage');
-                    const matchProgressElement = document.getElementById('matchProgress');
-                    if (matchPercentageElement && matchProgressElement) {
-                        matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
-                        matchProgressElement.style.width = `${verificationData.matchPercentage}%`;
-                        matchProgressElement.setAttribute('aria-valuenow', verificationData.matchPercentage);
-                        
-                        // Update progress bar color based on match percentage
-                        if (verificationData.matchPercentage >= 75) {
-                            matchProgressElement.className = 'progress-bar bg-success';
-                        } else if (verificationData.matchPercentage >= 60) {
-                            matchProgressElement.className = 'progress-bar bg-warning';
-                        } else {
-                            matchProgressElement.className = 'progress-bar bg-danger';
-                        }
-                    }
-                    
                     if (!verificationResponse.ok) {
                         // Handle 401 specifically
                         if (verificationResponse.status === 401) {
                             if (verificationData.matchPercentage >= 70) {
                                 faceVerificationStatus.textContent = `Face verification successful! Match percentage: ${verificationData.matchPercentage.toFixed(2)}%`;
                                 faceVerificationStatus.className = 'alert alert-success';
+                                
+                                // Update match percentage display
+                                const matchPercentageElement = document.getElementById('matchPercentage');
+                                const matchProgressElement = document.getElementById('matchProgress');
+                                const verificationActions = document.getElementById('verificationActions');
+                                
+                                if (matchPercentageElement && matchProgressElement) {
+                                    matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                                    matchProgressElement.style.width = `${verificationData.matchPercentage}%`;
+                                    matchProgressElement.setAttribute('aria-valuenow', verificationData.matchPercentage);
+                                    
+                                    // Update progress bar color based on match percentage
+                                    if (verificationData.matchPercentage >= 75) {
+                                        matchProgressElement.className = 'progress-bar bg-success';
+                                    } else if (verificationData.matchPercentage >= 60) {
+                                        matchProgressElement.className = 'progress-bar bg-warning';
+                                    } else {
+                                        matchProgressElement.className = 'progress-bar bg-danger';
+                                    }
+                                }
+
+                                // Show continue to voting button
+                                if (verificationActions) {
+                                    verificationActions.style.display = 'block';
+                                }
                                 
                                 // Update voter status
                                 try {
@@ -1013,21 +1048,67 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                                     console.log('Voter status updated:', updateData);
                                 } catch (updateError) {
                                     console.error('Error updating voter status:', updateError);
-                                    faceVerificationStatus.textContent += ' (Status update failed)';
-                                    faceVerificationStatus.className = 'alert alert-warning';
                                 }
                             } else {
-                                faceVerificationStatus.textContent = `Face verification failed: ${verificationData.message}. Match percentage: ${verificationData.matchPercentage.toFixed(2)}%`;
-                                faceVerificationStatus.className = 'alert alert-warning';
+                                faceVerificationStatus.textContent = `Face verification failed. Match percentage: ${verificationData.matchPercentage.toFixed(2)}%`;
+                                faceVerificationStatus.className = 'alert alert-danger';
+                                
+                                // Hide continue to voting button
+                                const verificationActions = document.getElementById('verificationActions');
+                                if (verificationActions) {
+                                    verificationActions.style.display = 'none';
+                                }
                             }
-                            return;
+                        } else {
+                            // Handle other errors
+                            faceVerificationStatus.textContent = verificationData.error || 'Face verification failed';
+                            faceVerificationStatus.className = 'alert alert-danger';
+                            
+                            // Hide continue to voting button
+                            const verificationActions = document.getElementById('verificationActions');
+                            if (verificationActions) {
+                                verificationActions.style.display = 'none';
+                            }
                         }
-                        throw new Error(verificationData.message || verificationData.error || 'Face verification failed');
-                    }
-                    
-                    if (verificationData.success && verificationData.isMatch) {
+                    } else if (!verificationData.success) {
+                        // Handle verification failure
+                        faceVerificationStatus.textContent = verificationData.error || 'Face verification failed';
+                        faceVerificationStatus.className = 'alert alert-danger';
+                        
+                        // Hide continue to voting button
+                        const verificationActions = document.getElementById('verificationActions');
+                        if (verificationActions) {
+                            verificationActions.style.display = 'none';
+                        }
+                    } else {
+                        // Handle successful verification
                         faceVerificationStatus.textContent = `Face verification successful! Match percentage: ${verificationData.matchPercentage.toFixed(2)}%`;
                         faceVerificationStatus.className = 'alert alert-success';
+                        
+                        // Update match percentage display
+                        const matchPercentageElement = document.getElementById('matchPercentage');
+                        const matchProgressElement = document.getElementById('matchProgress');
+                        const verificationActions = document.getElementById('verificationActions');
+                        
+                        if (matchPercentageElement && matchProgressElement) {
+                            matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                            matchProgressElement.style.width = `${verificationData.matchPercentage}%`;
+                            matchProgressElement.setAttribute('aria-valuenow', verificationData.matchPercentage);
+                            
+                            // Update progress bar color based on match percentage
+                            if (verificationData.matchPercentage >= 75) {
+                                matchProgressElement.className = 'progress-bar bg-success';
+                            } else if (verificationData.matchPercentage >= 60) {
+                                matchProgressElement.className = 'progress-bar bg-warning';
+                            } else {
+                                matchProgressElement.className = 'progress-bar bg-danger';
+                            }
+                        }
+
+                        // Show continue to voting button
+                        if (verificationActions) {
+                            verificationActions.style.display = 'block';
+                        }
                         
                         // Update voter status
                         try {
@@ -1048,21 +1129,9 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
 
                             const updateData = await updateResponse.json();
                             console.log('Voter status updated:', updateData);
-                            
-                            // Update UI to show verification status
-                            const statusBadge = document.getElementById('voterStatus');
-                            if (statusBadge) {
-                                statusBadge.textContent = 'Face Verified';
-                                statusBadge.className = 'badge bg-success';
-                            }
                         } catch (updateError) {
                             console.error('Error updating voter status:', updateError);
-                            faceVerificationStatus.textContent += ' (Status update failed)';
-                            faceVerificationStatus.className = 'alert alert-warning';
                         }
-                    } else {
-                        faceVerificationStatus.textContent = 'Face verification failed';
-                        faceVerificationStatus.className = 'alert alert-danger';
                     }
                 } catch (error) {
                     console.error('Face verification error:', error);
@@ -1071,8 +1140,8 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                 }
             });
             
-            // Handle allow/deny buttons
-            document.getElementById('allowVoterBtn').addEventListener('click', function() {
+            // Handle continue to voting button
+            document.getElementById('continueToVotingBtn').addEventListener('click', function() {
                 const voterId = localStorage.getItem('currentVoterId');
                 if (voterId) {
                     // Update voter status to allowed
@@ -1088,7 +1157,7 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            alert('Voter has been allowed to proceed with voting.');
+                            alert('Voter verified successfully! Please proceed to the voting booth.');
                             resetFaceVerification();
                         } else {
                             alert('Error updating voter status.');
@@ -1101,35 +1170,6 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                 }
             });
             
-            document.getElementById('denyVoterBtn').addEventListener('click', function() {
-                const voterId = localStorage.getItem('currentVoterId');
-                if (voterId) {
-                    // Update voter status to denied
-                    fetch(`/api/voters/${voterId}/status`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            status: 'denied'
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Voter has been denied access.');
-                            resetFaceVerification();
-                        } else {
-                            alert('Error updating voter status.');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error updating voter status.');
-                    });
-                }
-            });
-
             // Add event listener for update face button
             document.getElementById('updateFaceBtn').addEventListener('click', async function() {
                 if (!capturedImage) {
@@ -1268,6 +1308,79 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
             } catch (error) {
                 console.error('Face registration error:', error);
                 alert('Error registering face: ' + error.message);
+            }
+        }
+
+        // AI Assistant functionality
+        function initializeAIAssistant() {
+            const chatMessages = document.getElementById('chat-messages');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-message');
+            
+            // Add welcome message
+            addMessage('bot', 'Hello! I am your AI assistant. How can I help you today?');
+            
+            // Handle send button click
+            sendButton.addEventListener('click', sendMessage);
+            
+            // Handle enter key press
+            userInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            function sendMessage() {
+                const message = userInput.value.trim();
+                if (message) {
+                    // Add user message to chat
+                    addMessage('user', message);
+                    
+                    // Clear input
+                    userInput.value = '';
+                    
+                    // Send to backend
+                    fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                        },
+                        body: JSON.stringify({ message })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            addMessage('bot', data.response);
+                        } else {
+                            addMessage('bot', 'Sorry, I encountered an error. Please try again.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Chat error:', error);
+                        addMessage('bot', 'Sorry, I encountered an error. Please try again.');
+                    });
+                }
+            }
+            
+            function addMessage(sender, message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}-message mb-3`;
+                
+                const messageContent = document.createElement('div');
+                messageContent.className = sender === 'user' ? 'bg-primary text-white' : 'bg-light';
+                messageContent.style.padding = '10px 15px';
+                messageContent.style.borderRadius = '15px';
+                messageContent.style.maxWidth = '80%';
+                messageContent.style.marginLeft = sender === 'user' ? 'auto' : '0';
+                messageContent.style.marginRight = sender === 'user' ? '0' : 'auto';
+                
+                messageContent.textContent = message;
+                messageDiv.appendChild(messageContent);
+                chatMessages.appendChild(messageDiv);
+                
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
             }
         }
     </script>

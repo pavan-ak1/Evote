@@ -115,14 +115,6 @@ def verify_face():
             print("Processing captured image...")
             image1 = base64_to_image(data['image1'])
             
-            # Check image quality
-            quality_check, quality_message = check_face_quality(image1)
-            if not quality_check:
-                return jsonify({
-                    'success': False,
-                    'error': f'Captured image quality issue: {quality_message}. Please retake the photo in better conditions.'
-                }), 400
-            
             # Save temporarily for DeepFace
             temp_path1 = os.path.join(temp_dir, 'temp1.jpg')
             image1.save(temp_path1, 'JPEG')
@@ -194,19 +186,7 @@ def verify_face():
             # Define more reasonable verification thresholds
             VERY_HIGH_CONFIDENCE = 0.85  # 85% similarity
             HIGH_CONFIDENCE = 0.80  # 80% similarity
-            MEDIUM_CONFIDENCE = 0.75  # 75% similarity
-            
-            # Check if any model shows very low similarity
-            if min(verification_results) < 0.65:  # If any model is less than 65% confident
-                return jsonify({
-                    'success': False,
-                    'error': 'Face verification failed: Significant differences detected',
-                    'matchPercentage': avg_similarity,
-                    'details': {
-                        'average_similarity': avg_similarity,
-                        'model_similarities': dict(zip(models, verification_results))
-                    }
-                }), 401
+            MEDIUM_CONFIDENCE = 0.75
             
             # Determine confidence level
             if avg_similarity >= VERY_HIGH_CONFIDENCE:
@@ -233,14 +213,6 @@ def verify_face():
                 'modelResults': {model: score for model, score in zip(models, verification_results)},
                 'recommendations': []
             }
-            
-            if not verification_status['success']:
-                verification_status['error'] = 'Face verification failed: Images do not match'
-                verification_status['recommendations'].extend([
-                    "The captured face does not match the registered face",
-                    "Please ensure you are the registered voter",
-                    "If you are the registered voter, try again with better lighting and a clear face position"
-                ])
             
             return jsonify(verification_status)
         except Exception as e:

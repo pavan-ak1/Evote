@@ -80,9 +80,25 @@
     .action-buttons button {
       margin: 0 5px;
     }
+    .success-message {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #28a745;
+      color: white;
+      padding: 15px 25px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: none;
+      transition: opacity 0.3s ease-in-out;
+    }
   </style>
 </head>
 <body>
+  <!-- Add success message container -->
+  <div id="success-message" class="success-message"></div>
+  
   <div class="container">
     <h1>Time Slot Booking</h1>
     <div class="date-picker">
@@ -103,6 +119,9 @@
   </div>
 
   <script>
+    // Global variables
+    let bookedSlots = [];
+
     // Retrieve stored values from localStorage (make sure your login saves these)
     const voterId = localStorage.getItem("voterId");
     const phoneNumber = localStorage.getItem("phoneNumber");
@@ -244,6 +263,35 @@
     }
 
     /***********************************
+     * UPDATE BOOKED SLOTS DISPLAY
+     ***********************************/
+    function updateBookedSlotsDisplay() {
+      const bookedContainer = document.getElementById("booked-slots-container");
+      if (!bookedSlots || bookedSlots.length === 0) {
+        bookedContainer.innerHTML = "<p>You have no booked slots.</p>";
+        return;
+      }
+
+      bookedContainer.innerHTML = "<h3>Your Booked Slots:</h3>";
+      bookedSlots.forEach(slot => {
+        const slotDiv = document.createElement("div");
+        slotDiv.classList.add("booked-slot");
+        slotDiv.classList.add("booked");
+        slotDiv.innerHTML = `
+          <div>
+            <strong>Date:</strong> ${slot.date}<br>
+            <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
+            <strong>Status:</strong> Confirmed
+          </div>
+          <div>
+            <button class="book-btn" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
+          </div>
+        `;
+        bookedContainer.appendChild(slotDiv);
+      });
+    }
+
+    /***********************************
      * FETCH BOOKED SLOTS FOR THE VOTER
      ***********************************/
     async function fetchBookedSlots() {
@@ -285,12 +333,22 @@
      * COPY SLOT ID FUNCTION
      ***********************************/
     function copySlotID(slotId) {
-      const slotText = document
-        .getElementById(`slot-id-${slotId}`)
-        .innerText.split(": ")[1];
       navigator.clipboard
-        .writeText(slotText)
-        .then(() => alert(`Slot ID copied: ${slotText}`))
+        .writeText(slotId)
+        .then(() => {
+          const successMessage = document.getElementById('success-message');
+          successMessage.textContent = `Slot ID copied: ${slotId}`;
+          successMessage.style.display = 'block';
+          successMessage.style.opacity = '1';
+          
+          // Hide the message after 3 seconds
+          setTimeout(() => {
+            successMessage.style.opacity = '0';
+            setTimeout(() => {
+              successMessage.style.display = 'none';
+            }, 300);
+          }, 3000);
+        })
         .catch(err => console.error("Failed to copy:", err));
     }
 

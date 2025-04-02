@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const accountSid = 'AC4a77cf305a2524932ee4b63f89792ebd';
 const authToken = '825b4667ed49063ff9d16c984420b6b6';
 const twilioPhoneNumber = '+19787231027';
-const jwtSecret = process.env.JWT_SECRET || 'a95a996b6508abb29bfd9e47c0a4b4033aa7baae4a35ecce1aed4e90456ddde3bb771abbb1168501bd351ffbe40edfac5f9bc142556fa5f3929e3691b420cab3d595c84c2fa352f851692b825235c127a24a7b4212cc635b76186001e7f3c7f6cd09bc45e9b0a8ed775b7510ba5d1cc79e0091d26ffbd4d2975e3ca96fbfbf2b51f2fe26874a97e23394599791bf6378ca0189e47e67fe3a42342f08d27d7c87df80d742ba81defa4d2924d3e936b5df45b44f8509bc91dc8758e318e785b222c16f09a0ed7ca1ee10f962a4e829e1c8db9ac1e0f5b812c6b8ac78d290bc6c761b155b456e497d77ee21e1898e7074228192b9634029bb2494d2cde3d0ac9fb7';
+const jwtSecret = process.env.JWT_SECRET;
 
 const client = new twilio(accountSid, authToken);
 const otps = {};
