@@ -8,7 +8,6 @@ router.post("/send-otp", authController.sendOTP);
 router.post("/verify-otp", authController.verifyOTP);
 router.post("/verify-otp-and-get-uid", authController.verifyOTPAndGetUID);
 router.post('/login', authController.login);
-router.post('/admin-login', authController.adminLogin);
 router.post("/refresh-token", authController.refreshToken);
 
 

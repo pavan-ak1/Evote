@@ -125,16 +125,28 @@
       const slotsContainer = document.getElementById("slots-container");
       slotsContainer.innerHTML = `<p class="loading">Loading slots...</p>`;
       try {
-        const token = localStorage.getItem("token"); // Get JWT token
-        // Use correct endpoint for time slots
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
+
         const response = await fetch(`/api/slots/available?date=${date}`, {
           headers: {
-            Authorization: `Bearer ${token}`
+            "Authorization": `Bearer ${token}`
           }
         });
-        if (!response.ok) throw new Error("Failed to fetch time slots.");
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch time slots.");
+        }
+
         const slots = await response.json();
-        console.log("Fetched slots:", slots); // Debug logging
+        console.log("Fetched slots:", slots);
         displaySlots(slots);
       } catch (error) {
         console.error("Error fetching slots:", error);
@@ -191,7 +203,12 @@
       button.innerText = "Booking...";
 
       try {
-        const token = localStorage.getItem("token"); // Get JWT token
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
+
         const response = await fetch("/api/slots/book", {
           method: "POST",
           headers: {
@@ -201,21 +218,26 @@
           body: JSON.stringify({ slotId })
         });
 
-        const result = await response.json();
-        if (response.ok) {
-          alert(result.message);
-          // Refresh available slots
-          fetchSlots(slotDateInput.value);
-          // Refresh booked slots
-          fetchBookedSlots();
-        } else {
-          alert(result.error || "Booking failed.");
-          button.disabled = false;
-          button.innerText = "Book Slot";
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          const data = await response.json();
+          throw new Error(data.error || "Failed to book slot");
         }
+
+        const data = await response.json();
+        alert("Slot booked successfully!");
+        await fetchBookedSlots();
+        await fetchSlots(slotDateInput.value);
       } catch (error) {
         console.error("Error booking slot:", error);
-        alert("Booking failed. Please try again.");
+        if (error.message.includes("Authentication failed")) {
+          window.location.href = "/login.html";
+        } else {
+          alert(error.message);
+        }
         button.disabled = false;
         button.innerText = "Book Slot";
       }
@@ -229,35 +251,33 @@
       bookedContainer.innerHTML = `<p class="loading">Loading booked slots...</p>`;
       try {
         const token = localStorage.getItem("token");
-        // The backend returns an array, either empty or [oneSlot]
-        const response = await fetch(`/api/slots/booked`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error("Failed to fetch booked slots.");
-        const bookedSlots = await response.json();
-
-        if (!bookedSlots.length) {
-          bookedContainer.innerHTML = "<p>No booked slots found.</p>";
+        if (!token) {
+          window.location.href = "/login.html";
           return;
         }
 
-        // Render booked slots (in this case, typically just one)
-        bookedContainer.innerHTML = bookedSlots
-          .map(slot => {
-            return `
-              <div class="booked-slot booked">
-                <div>
-                  <strong>${slot.date}</strong>: ${slot.startTime} - ${slot.endTime}<br>
-                  <span id="slot-id-${slot._id}">Slot ID: ${slot._id}</span>
-                </div>
-                <button onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
-              </div>
-            `;
-          })
-          .join("");
+        const response = await fetch("/api/slots/booked", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch booked slots");
+        }
+
+        const data = await response.json();
+        bookedSlots = data;
+        updateBookedSlotsDisplay();
       } catch (error) {
         console.error("Error fetching booked slots:", error);
-        bookedContainer.innerHTML = "<p style='color: red;'>Error loading booked slots.</p>";
+        if (error.message.includes("Authentication failed")) {
+          window.location.href = "/login.html";
+        }
       }
     }
 
@@ -285,11 +305,24 @@
      * INITIALIZE EVENT LISTENERS ON LOAD
      ***********************************/
     document.addEventListener("DOMContentLoaded", () => {
-      // Fetch available slots for "today"
+      // Check authentication first
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Please log in to access time slot booking");
+        window.location.href = "/login.html";
+        return;
+      }
+
+      // Set default date to today (YYYY-MM-DD)
+      const slotDateInput = document.getElementById("slot-date");
+      const today = new Date().toISOString().split("T")[0];
+      slotDateInput.value = today;
+
+      // Fetch initial data
       fetchSlots(today);
-      // Fetch booked slot(s) on page load so it doesn't disappear after refresh
       fetchBookedSlots();
 
+      // Add event listeners
       document.getElementById("fetch-slots").addEventListener("click", () => {
         fetchSlots(slotDateInput.value);
       });

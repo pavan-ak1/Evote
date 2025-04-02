@@ -26,6 +26,7 @@ cloudinary.config({
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('Admin login attempt for email:', email);
     
     // Check for required fields
     if (!email || !password) {
@@ -33,15 +34,26 @@ router.post('/login', async (req, res) => {
     }
     
     // Find the admin by email
-    const admin = await User.findOne({ email, isAdmin: true });
+    const admin = await User.findOne({ email, isAdmin: true }).select('+password');
+    console.log('Admin user found:', admin ? 'Yes' : 'No');
+    
     if (!admin) {
-      return res.status(404).json({ error: 'Admin not found' });
+      console.log('No admin user found with email:', email);
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+
+    if (!admin.password) {
+      console.log('Admin user found but password is missing');
+      return res.status(401).json({ error: 'Invalid admin credentials' });
     }
     
     // Verify the password
     const isMatch = await bcrypt.compare(password, admin.password);
+    console.log('Password match:', isMatch);
+    
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      console.log('Password does not match');
+      return res.status(401).json({ error: 'Invalid admin credentials' });
     }
     
     // Generate JWT token
@@ -51,11 +63,15 @@ router.post('/login', async (req, res) => {
       { expiresIn: '1d' }
     );
     
+    console.log('Admin login successful, token generated');
+    
     // Return success with token
     return res.json({
       success: true,
       token,
-      adminId: admin._id
+      adminId: admin._id,
+      name: admin.name,
+      email: admin.email
     });
   } catch (error) {
     console.error('Admin login error:', error);

@@ -17,7 +17,7 @@ async function createAdmin() {
     }
     
     // Create new admin user
-    const hashedPassword = await bcrypt.hash('Admin@123', 10);
+    const hashedPassword = await bcrypt.hash('admin123', 10);
     const admin = new User({
       name: 'Admin',
       email: 'admin@eci.gov.in',
@@ -31,7 +31,7 @@ async function createAdmin() {
     
     console.log('Admin user created successfully:');
     console.log('Email: admin@eci.gov.in');
-    console.log('Password: Admin@123');
+    console.log('Password: admin123');
     console.log('isAdmin: true');
     
     await mongoose.connection.close();

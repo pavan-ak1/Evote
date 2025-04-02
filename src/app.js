@@ -32,13 +32,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/slots', slotRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/digital-token', digitalTokenRoutes);
 app.use('/voter', expressRoutes);
+app.use('/api/digital-token', digitalTokenRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 
 // Add backward compatibility routes
 app.use('/admin', adminRoutes);
-app.use('/auth', authRoutes);
 app.use('/api/timeslots', slotRoutes);
 app.use('/timeslots', slotRoutes);
 

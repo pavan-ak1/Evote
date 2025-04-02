@@ -2,7 +2,7 @@ const User = require('../models/userModel');
 const otpUtils = require('../utils/otpUtils');
 const twilio = require('twilio');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const accountSid = 'AC4a77cf305a2524932ee4b63f89792ebd';
 const authToken = '825b4667ed49063ff9d16c984420b6b6';
@@ -45,16 +45,14 @@ const signup = async (req, res) => {
             });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        console.log('Hashed Password:', hashedPassword);
-
+        // Create user without hashing password (the model will handle it)
         const user = new User({ 
             name, 
             email, 
-            password: hashedPassword, 
+            password, // Pass plain password, model will hash it
             adharNumber, 
             phoneNumber, 
-            voterId, 
+            voterId,
             phoneNumberVerified: true // Set to true by default since we're not using OTP
         });
 
