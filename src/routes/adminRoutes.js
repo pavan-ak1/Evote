@@ -26,7 +26,6 @@ cloudinary.config({
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Admin login attempt for email:', email);
     
     // Check for required fields
     if (!email || !password) {
@@ -35,24 +34,19 @@ router.post('/login', async (req, res) => {
     
     // Find the admin by email
     const admin = await User.findOne({ email, isAdmin: true }).select('+password');
-    console.log('Admin user found:', admin ? 'Yes' : 'No');
     
     if (!admin) {
-      console.log('No admin user found with email:', email);
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
 
     if (!admin.password) {
-      console.log('Admin user found but password is missing');
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
     
     // Verify the password
     const isMatch = await bcrypt.compare(password, admin.password);
-    console.log('Password match:', isMatch);
     
     if (!isMatch) {
-      console.log('Password does not match');
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
     
@@ -62,8 +56,6 @@ router.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
-    
-    console.log('Admin login successful, token generated');
     
     // Return success with token
     return res.json({
@@ -83,29 +75,17 @@ router.post('/login', async (req, res) => {
 router.get("/voters", authenticateAdmin, async (req, res) => {
   try {
     const voters = await User.find({ isAdmin: false })
-      .select('-password -faceEmbedding')
-      .populate('timeSlot')
-      .lean()
-      .exec();
-
-    // Format the data for the table
-    const formattedVoters = voters.map(voter => ({
-      id: voter._id,
-      name: voter.name,
-      email: voter.email,
-      phoneNumber: voter.phoneNumber || 'N/A',
-      voterId: voter.voterId || voter._id,
-      aadhaar: voter.aadhaar || 'Not Verified',
-      timeSlot: voter.timeSlot ? 
-        `${voter.timeSlot.date} ${voter.timeSlot.startTime}` : 
-        'Not Booked',
-      actions: "View Details" // This field is handled by the frontend
-    }));
-
-    res.json(formattedVoters);
+      .select('-password')
+      .sort({ createdAt: -1 })
+      .limit(100);
+      
+    res.json(voters);
   } catch (error) {
-    console.error("Error fetching voters:", error);
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching voters:', error);
+    res.status(500).json({ 
+      error: 'Error fetching voters',
+      details: error.message 
+    });
   }
 });
 
@@ -262,72 +242,60 @@ router.post("/read-qr", authenticateAdmin, async (req, res) => {
 router.post("/verify-face", authenticateAdmin, async (req, res) => {
   try {
     const { image1, userId } = req.body;
-    console.log("Verifying face for user:", userId);
     
     if (!userId || !image1) {
-      return res.status(400).json({ error: "User ID and captured image are required" });
+      return res.status(400).json({ 
+        success: false,
+        error: "User ID and face image are required"
+      });
     }
     
-    // Fetch the user
+    // Find the user
     const user = await User.findById(userId);
-    
     if (!user) {
-      console.error("User not found for face verification:", userId);
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found"
+      });
     }
     
-    // Check for face registration and get the correct face image
-    let registeredFaceImage = null;
-    
-    // First try to get the face image from faceImageUrl
-    if (user.faceImageUrl) {
-      registeredFaceImage = user.faceImageUrl;
-      console.log("Using faceImageUrl for verification");
-    }
-    // If no faceImageUrl, try to get from faceEmbedding
-    else if (user.faceEmbedding && user.faceEmbedding.length > 0) {
-      registeredFaceImage = user.faceEmbedding[0];
-      console.log("Using faceEmbedding for verification");
-      // Update faceImageUrl with the faceEmbedding
-      user.faceImageUrl = registeredFaceImage;
-      user.hasFaceRegistered = true;
-      await user.save();
-    }
-    
+    // Get the registered face image
+    const registeredFaceImage = user.faceImageUrl;
     if (!registeredFaceImage) {
-      console.error("User has not registered their face:", userId);
-      return res.status(400).json({ error: "User has not registered their face" });
+      return res.status(400).json({ 
+        success: false,
+        error: "User has not registered a face image"
+      });
     }
-
-    console.log("Starting face verification with registered image");
-    // Verify face using the face service
+    
+    // Verify the face
     const verificationResult = await faceService.verifyFace(image1, registeredFaceImage);
     
-    if (verificationResult.success && verificationResult.matchPercentage >= 70) {
-      // Update user's face verification status
-      user.faceVerifiedAt = new Date();
-      await user.save();
-
-      return res.json({
-        success: true,
-        message: "Face verified successfully",
-        matchPercentage: verificationResult.matchPercentage,
-        isMatch: true
-      });
-    } else {
-      // Return 401 with detailed information
-      return res.status(401).json({
+    if (!verificationResult.success) {
+      return res.status(500).json({
         success: false,
-        message: verificationResult.error || "Face verification failed: Significant differences detected",
-        matchPercentage: verificationResult.matchPercentage,
-        isMatch: verificationResult.matchPercentage >= 70,
-        details: {
-          threshold: 70,
-          currentMatch: verificationResult.matchPercentage,
-          status: verificationResult.matchPercentage >= 70 ? "match" : "no_match"
-        }
+        error: verificationResult.error || "Face verification failed",
+        matchPercentage: 0,
+        isMatch: false
       });
     }
+    
+    // Update verification status
+    user.faceVerifiedAt = new Date();
+    await user.save();
+    
+    return res.json({
+      success: true,
+      message: "Face verified successfully",
+      matchPercentage: verificationResult.matchPercentage,
+      isMatch: verificationResult.matchPercentage >= 70,
+      details: {
+        threshold: 70,
+        currentMatch: verificationResult.matchPercentage,
+        status: verificationResult.matchPercentage >= 70 ? "match" : "no_match"
+      }
+    });
+    
   } catch (error) {
     console.error("Face verification error:", error);
     return res.status(500).json({ 

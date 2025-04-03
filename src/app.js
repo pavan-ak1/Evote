@@ -55,8 +55,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting',
   connectTimeoutMS: 30000,
   socketTimeoutMS: 45000
 })
-.then(() => console.log('MongoDB connected in app.js'))
-.catch(err => console.error('MongoDB connection error in app.js:', err));
+.then(() => {})
+.catch(err => console.error('MongoDB connection error:', err));
 
 // Default route
 app.get('*', (req, res) => {
@@ -65,8 +65,11 @@ app.get('*', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    error: 'Internal Server Error',
+    message: err.message 
+  });
 });
 
 // Export the app

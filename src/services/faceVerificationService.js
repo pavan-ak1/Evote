@@ -17,6 +17,11 @@ class FaceVerificationService {
         
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
+                // Validate input images
+                if (!image1 || !image2) {
+                    throw new Error('Both images are required for verification');
+                }
+
                 // Ensure both images are in the correct format
                 let processedImage1 = image1;
                 let processedImage2 = image2;
@@ -43,56 +48,49 @@ class FaceVerificationService {
                     processedImage2 = `data:image/jpeg;base64,${processedImage2}`;
                 }
 
-                console.log(`Attempt ${attempt}/${this.maxRetries}: Sending verification request to:`, `${this.baseURL}/verify`);
-                console.log('Image1 format:', processedImage1.substring(0, 50) + '...');
-                console.log('Image2 format:', processedImage2.substring(0, 50) + '...');
+                // Verify the Python service is available
+                try {
+                    await axios.get(`${this.baseURL}/health`, { timeout: 5000 });
+                } catch (healthError) {
+                    console.error('Python service health check failed:', healthError);
+                    throw new Error('Face verification service is unavailable');
+                }
 
                 const response = await axios.post(`${this.baseURL}/verify`, {
                     image1: processedImage1,
                     image2: processedImage2
                 }, {
-                    timeout: 60000 // 60 second timeout for verification
+                    timeout: 30000, // 30 second timeout for verification
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
 
-                console.log('Verification response:', response.data);
-
-                if (!response.data || typeof response.data.success === 'undefined') {
+                if (!response.data) {
                     throw new Error('Invalid response from face verification service');
                 }
 
-                // Convert the response to match the expected format
                 return {
-                    success: response.data.success,
-                    isMatch: response.data.matchPercentage >= 0.75, // 75% threshold
-                    matchPercentage: response.data.matchPercentage * 100
+                    success: true,
+                    matchPercentage: response.data.matchPercentage || 0,
+                    error: null
                 };
+
             } catch (error) {
+                console.error(`Attempt ${attempt} failed:`, error);
                 lastError = error;
-                console.error(`Attempt ${attempt}/${this.maxRetries} failed:`, error.message);
-                
-                // Handle 401 response specifically
-                if (error.response?.status === 401) {
-                    return {
-                        success: false,
-                        isMatch: false,
-                        matchPercentage: error.response.data.matchPercentage * 100,
-                        error: error.response.data.error
-                    };
-                }
                 
                 if (attempt < this.maxRetries) {
-                    console.log(`Retrying in ${this.retryDelay/1000} seconds...`);
                     await this.sleep(this.retryDelay);
                 }
             }
         }
 
-        // If we get here, all retries failed
-        console.error('All verification attempts failed');
-        if (lastError.response?.data) {
-            throw new Error(`Face verification service error: ${lastError.response.data.error || lastError.message}`);
-        }
-        throw new Error(`Face verification service error: ${lastError.message}`);
+        return {
+            success: false,
+            matchPercentage: 0,
+            error: lastError?.message || 'Face verification failed after all retries'
+        };
     }
 
     async registerFace(userId, faceImage) {
