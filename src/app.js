@@ -55,7 +55,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting',
   connectTimeoutMS: 30000,
   socketTimeoutMS: 45000
 })
-.then(() => {})
+.then(() => {console.log('MongoDB connected in app.js')})
 .catch(err => console.error('MongoDB connection error:', err));
 
 // Default route
