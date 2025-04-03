@@ -194,6 +194,25 @@ router.post('/face/register', authMiddleware, async (req, res) => {
             });
         }
 
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        // Check service health first
+        const isHealthy = await faceService.checkServiceHealth();
+        if (!isHealthy) {
+            return res.status(503).json({
+                success: false,
+                message: "Face registration service is temporarily unavailable",
+                error: "Service health check failed"
+            });
+        }
+
         console.log('Starting face registration for user:', userId);
         
         const result = await faceService.registerFace(userId, faceImage);
@@ -203,22 +222,30 @@ router.post('/face/register', authMiddleware, async (req, res) => {
             return res.status(500).json({ 
                 success: false, 
                 message: "Error registering face",
-                error: result.error 
+                error: result.error,
+                details: "Please try again in a few minutes"
             });
         }
+
+        // Update user's face registration status
+        user.hasFaceRegistered = true;
+        user.faceImageUrl = result.faceImageUrl;
+        user.faceRegisteredAt = new Date();
+        await user.save();
 
         console.log('Face registration successful for user:', userId);
         res.json({ 
             success: true, 
             message: "Face registered successfully",
-            embedding: result.embedding 
+            faceImageUrl: result.faceImageUrl
         });
     } catch (error) {
         console.error('Face registration error:', error);
         res.status(500).json({ 
             success: false, 
             message: "Error registering face",
-            error: error.message 
+            error: error.message,
+            details: "Please try again in a few minutes"
         });
     }
 });
