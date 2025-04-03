@@ -18,6 +18,7 @@ CORS(app)
 # Backend API configuration
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
+PORT = int(os.environ.get('PORT', 5000))
 
 def download_image_from_url(url):
     try:
@@ -86,11 +87,12 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-@app.route('/health', methods=['GET'])
+@app.route('/')
 def health_check():
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.now().isoformat()
+        'service': 'face-verification',
+        'version': '1.0.0'
     })
 
 @app.route('/verify', methods=['POST'])
@@ -452,5 +454,4 @@ def verify_voting():
         }), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('FACE_VERIFICATION_PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=PORT)

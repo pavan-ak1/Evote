@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: voter-verify-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+
+  - type: web
+    name: voter-verify-face
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn face_verification_server:app
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: BACKEND_URL
+        sync: false
+      - key: BACKEND_API_KEY
+        sync: false
+      - key: MODEL_PATH
+        value: /opt/render/project/src/facenet_keras.h5 
