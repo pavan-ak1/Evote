@@ -10,8 +10,15 @@ dotenv.config();
 // Create Express app
 const app = express();
 
+// CORS configuration
+app.use(cors({
+  origin: ['https://voter-verify-backend.onrender.com', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

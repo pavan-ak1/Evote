@@ -1,7 +1,7 @@
 services:
   - type: web
     name: voter-verify-backend
-    env: node
+    runtime: node
     buildCommand: npm install
     startCommand: node server.js
     envVars:
@@ -26,7 +26,7 @@ services:
 
   - type: web
     name: voter-verify-face
-    env: python
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn face_verification_server:app
     envVars:
