@@ -200,6 +200,62 @@
       }
     }
 
+    async function downloadToken() {
+      try {
+        const response = await fetch('/api/voters/generate-token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to generate token');
+        }
+        
+        // Convert base64 to blob
+        const pdfData = data.token.pdfData;
+        const byteCharacters = atob(pdfData);
+        const byteArrays = [];
+        
+        for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
+          const slice = byteCharacters.slice(offset, offset + 1024);
+          const byteNumbers = new Array(slice.length);
+          
+          for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+          }
+          
+          const byteArray = new Uint8Array(byteNumbers);
+          byteArrays.push(byteArray);
+        }
+        
+        const blob = new Blob(byteArrays, { type: 'application/pdf' });
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'voting-token.pdf';
+        
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        // Show success message
+        showMessage('Token downloaded successfully!', 'success');
+        
+      } catch (error) {
+        console.error('Error downloading token:', error);
+        showMessage(error.message || 'Failed to download token', 'error');
+      }
+    }
+
     function showStatus(message, isSuccess) {
       const statusElement = document.getElementById('status');
       statusElement.textContent = message;

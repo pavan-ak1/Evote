@@ -7,6 +7,9 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const FaceVerificationService = require('../services/faceVerificationService');
 const faceService = new FaceVerificationService();
+const QRCode = require('qrcode');
+const PDFDocument = require('pdfkit');
+const DigitalToken = require('../models/digitalTokenModel');
 
 // router.post("/verify-face", async (req, res) => {
 //     try {
@@ -309,6 +312,138 @@ router.get('/face/health', async (req, res) => {
             error: error.message 
         });
     }
+});
+
+router.post("/generate-token", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).populate('timeSlot');
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    if (!user.timeSlot) {
+      return res.status(400).json({ error: "No time slot assigned" });
+    }
+    
+    // Check if token already exists
+    const existingToken = await DigitalToken.findOne({ voterId: userId });
+    if (existingToken) {
+      return res.status(400).json({ error: "Token already generated" });
+    }
+    
+    // Create token data
+    const tokenData = {
+      voterId: userId,
+      slotId: user.timeSlot._id,
+      name: user.name,
+      voterId: user.voterId || userId,
+      timeSlot: `${user.timeSlot.date} at ${user.timeSlot.startTime}`,
+      generatedAt: new Date().toISOString()
+    };
+    
+    // Generate QR code
+    const qrCode = await QRCode.toDataURL(JSON.stringify(tokenData), {
+      errorCorrectionLevel: 'H',
+      margin: 1,
+      width: 300,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+    
+    // Create PDF document
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50,
+      bufferPages: true
+    });
+    
+    // Create a buffer to store the PDF
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    
+    // Create a promise to handle PDF generation
+    const pdfPromise = new Promise((resolve, reject) => {
+      doc.on('end', () => {
+        const result = Buffer.concat(chunks);
+        resolve(result);
+      });
+      doc.on('error', reject);
+    });
+    
+    // Add content to PDF
+    doc.font('Helvetica-Bold')
+       .fontSize(20)
+       .text('Digital Voting Token', { align: 'center' });
+    
+    doc.moveDown(2);
+    
+    doc.font('Helvetica')
+       .fontSize(12)
+       .text(`Name: ${user.name}`, { align: 'left' })
+       .text(`Voter ID: ${user.voterId || userId}`, { align: 'left' })
+       .text(`Time Slot: ${user.timeSlot.date} at ${user.timeSlot.startTime}`, { align: 'left' })
+       .text(`Generated At: ${new Date().toLocaleString()}`, { align: 'left' });
+    
+    doc.moveDown(2);
+    
+    // Add QR code
+    doc.image(qrCode, {
+      fit: [200, 200],
+      align: 'center'
+    });
+    
+    doc.moveDown(2);
+    
+    // Add instructions
+    doc.font('Helvetica')
+       .fontSize(10)
+       .text('Instructions:', { align: 'left' })
+       .fontSize(9)
+       .text('1. Present this token at the polling booth', { align: 'left' })
+       .text('2. Show the QR code to the polling officer', { align: 'left' })
+       .text('3. Keep this token safe and do not share it', { align: 'left' });
+    
+    // Finalize PDF
+    doc.end();
+    
+    // Wait for PDF to be generated
+    const pdfBuffer = await pdfPromise;
+    
+    // Create digital token record
+    const digitalToken = new DigitalToken({
+      voterId: userId,
+      token: JSON.stringify(tokenData),
+      qrCode: qrCode,
+      pdfData: pdfBuffer.toString('base64'),
+      generatedAt: new Date()
+    });
+    
+    await digitalToken.save();
+    
+    // Send response with PDF data
+    res.json({
+      success: true,
+      message: "Digital token generated successfully",
+      token: {
+        id: digitalToken._id,
+        generatedAt: digitalToken.generatedAt,
+        pdfData: pdfBuffer.toString('base64'),
+        mimeType: 'application/pdf'
+      }
+    });
+    
+  } catch (error) {
+    console.error("Error generating digital token:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to generate digital token",
+      details: error.message 
+    });
+  }
 });
 
 module.exports = router;
