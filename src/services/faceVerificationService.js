@@ -33,60 +33,71 @@ class FaceVerificationService {
     }
 
     async registerFace(userId, faceImage) {
-        try {
-            // Check service health first
-            const isHealthy = await this.checkServiceHealth();
-            if (!isHealthy) {
-                throw new Error('Face registration service is unavailable');
-            }
-
-            // Validate inputs
-            if (!userId || !faceImage) {
-                throw new Error('User ID and face image are required');
-            }
-
-            // Process the face image
-            let processedImage = faceImage;
-            if (!processedImage.startsWith('data:image')) {
-                processedImage = `data:image/jpeg;base64,${processedImage}`;
-            }
-
-            // Register face with Python service
-            const response = await axios.post(`${this.baseURL}/register`, {
-                userId,
-                faceImage: processedImage
-            }, {
-                timeout: 30000,
-                headers: {
-                    'Content-Type': 'application/json'
+        let lastError = null;
+        
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                // Check service health first
+                const isHealthy = await this.checkServiceHealth();
+                if (!isHealthy) {
+                    throw new Error('Face registration service is temporarily unavailable');
                 }
-            });
 
-            if (!response.data || !response.data.success) {
-                throw new Error(response.data?.message || 'Face registration failed');
+                // Validate inputs
+                if (!userId || !faceImage) {
+                    throw new Error('User ID and face image are required');
+                }
+
+                // Process the face image
+                let processedImage = faceImage;
+                if (!processedImage.startsWith('data:image')) {
+                    processedImage = `data:image/jpeg;base64,${processedImage}`;
+                }
+
+                // Register face with Python service
+                const response = await axios.post(`${this.baseURL}/register`, {
+                    userId,
+                    faceImage: processedImage
+                }, {
+                    timeout: 30000,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.data || !response.data.success) {
+                    throw new Error(response.data?.message || 'Face registration failed');
+                }
+
+                // Upload to Cloudinary for storage
+                const uploadResponse = await cloudinary.uploader.upload(processedImage, {
+                    folder: 'face-registration',
+                    resource_type: 'auto',
+                    timeout: 30000
+                });
+
+                if (!uploadResponse || !uploadResponse.secure_url) {
+                    throw new Error('Failed to upload face image to Cloudinary');
+                }
+
+                return {
+                    success: true,
+                    faceImageUrl: uploadResponse.secure_url,
+                    verified: response.data.verified || false
+                };
+
+            } catch (error) {
+                console.error(`Registration attempt ${attempt} failed:`, error.response?.data || error.message);
+                lastError = error;
+                
+                if (attempt < this.maxRetries) {
+                    await this.sleep(this.retryDelay);
+                }
             }
-
-            // Upload to Cloudinary for storage
-            const uploadResponse = await cloudinary.uploader.upload(processedImage, {
-                folder: 'face-registration',
-                resource_type: 'auto',
-                timeout: 30000
-            });
-
-            if (!uploadResponse || !uploadResponse.secure_url) {
-                throw new Error('Failed to upload face image to Cloudinary');
-            }
-
-            return {
-                success: true,
-                faceImageUrl: uploadResponse.secure_url,
-                verified: response.data.verified || false
-            };
-
-        } catch (error) {
-            console.error('Face registration error:', error.response?.data || error.message);
-            throw new Error(error.response?.data?.message || error.message || 'Face registration failed');
         }
+
+        // If we get here, all retries failed
+        throw new Error(lastError?.response?.data?.message || lastError?.message || 'Face registration failed after all retries');
     }
 
     async verifyFace(image1, image2) {

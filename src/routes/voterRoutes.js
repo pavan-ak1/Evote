@@ -203,13 +203,11 @@ router.post('/face/register', authMiddleware, async (req, res) => {
             });
         }
 
-        // Check service health first
-        const isHealthy = await faceService.checkServiceHealth();
-        if (!isHealthy) {
-            return res.status(503).json({
+        // Check if face is already registered
+        if (user.hasFaceRegistered) {
+            return res.status(400).json({
                 success: false,
-                message: "Face registration service is temporarily unavailable",
-                error: "Service health check failed"
+                message: "Face is already registered for this user"
             });
         }
 
@@ -219,9 +217,9 @@ router.post('/face/register', authMiddleware, async (req, res) => {
         
         if (!result.success) {
             console.error('Face registration failed:', result.error);
-            return res.status(500).json({ 
+            return res.status(503).json({ 
                 success: false, 
-                message: "Error registering face",
+                message: "Face registration service is temporarily unavailable",
                 error: result.error,
                 details: "Please try again in a few minutes"
             });
@@ -241,9 +239,9 @@ router.post('/face/register', authMiddleware, async (req, res) => {
         });
     } catch (error) {
         console.error('Face registration error:', error);
-        res.status(500).json({ 
+        res.status(503).json({ 
             success: false, 
-            message: "Error registering face",
+            message: "Face registration service is temporarily unavailable",
             error: error.message,
             details: "Please try again in a few minutes"
         });
