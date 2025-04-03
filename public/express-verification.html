@@ -219,23 +219,21 @@
         // Convert base64 to blob with proper error handling
         try {
           const pdfData = data.token.pdfData;
-          const byteCharacters = atob(pdfData);
-          const byteArrays = [];
           
-          // Process in chunks to handle large files
-          for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
-            const slice = byteCharacters.slice(offset, offset + 1024);
-            const byteNumbers = new Array(slice.length);
-            
-            for (let i = 0; i < slice.length; i++) {
-              byteNumbers[i] = slice.charCodeAt(i);
-            }
-            
-            const byteArray = new Uint8Array(byteNumbers);
-            byteArrays.push(byteArray);
+          // Remove any potential data URL prefix
+          const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '');
+          
+          // Convert base64 to binary string
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          
+          // Convert binary string to Uint8Array
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
           }
           
-          const blob = new Blob(byteArrays, { type: 'application/pdf' });
+          // Create blob with proper MIME type
+          const blob = new Blob([bytes], { type: 'application/pdf' });
           
           // Create download link with proper filename
           const url = window.URL.createObjectURL(blob);
@@ -276,6 +274,13 @@
       } else if (isSuccess === false) {
         statusElement.classList.add('error');
       }
+    }
+
+    function showMessage(message, type) {
+      const statusElement = document.getElementById('status');
+      statusElement.textContent = message;
+      statusElement.style.display = 'block';
+      statusElement.className = `status ${type}`;
     }
 
     document.getElementById('capture-btn').addEventListener('click', captureAndRegister);
