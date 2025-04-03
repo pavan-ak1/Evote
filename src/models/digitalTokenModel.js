@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
-const digitalTokenSchema = new mongoose.Schema({
+// Check if model already exists
+const DigitalToken = mongoose.models.DigitalToken || mongoose.model('DigitalToken', new mongoose.Schema({
     voterId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -34,30 +35,34 @@ const digitalTokenSchema = new mongoose.Schema({
     }
 }, {
     timestamps: true
-});
+}));
 
-// Index for faster queries
-digitalTokenSchema.index({ voterId: 1 });
-digitalTokenSchema.index({ status: 1 });
+// Add indexes if they don't exist
+if (!DigitalToken.schema.indexes().length) {
+    DigitalToken.schema.index({ voterId: 1 });
+    DigitalToken.schema.index({ status: 1 });
+}
 
-// Method to verify token
-digitalTokenSchema.methods.verify = async function() {
-    this.verifiedAt = new Date();
-    this.status = 'used';
-    return await this.save();
-};
+// Add methods if they don't exist
+if (!DigitalToken.prototype.verify) {
+    DigitalToken.prototype.verify = async function() {
+        this.verifiedAt = new Date();
+        this.status = 'used';
+        return await this.save();
+    };
+}
 
-// Method to revoke token
-digitalTokenSchema.methods.revoke = async function() {
-    this.status = 'revoked';
-    return await this.save();
-};
+if (!DigitalToken.prototype.revoke) {
+    DigitalToken.prototype.revoke = async function() {
+        this.status = 'revoked';
+        return await this.save();
+    };
+}
 
-// Method to check if token is valid
-digitalTokenSchema.methods.isValid = function() {
-    return this.status === 'active';
-};
-
-const DigitalToken = mongoose.model('DigitalToken', digitalTokenSchema);
+if (!DigitalToken.prototype.isValid) {
+    DigitalToken.prototype.isValid = function() {
+        return this.status === 'active';
+    };
+}
 
 module.exports = DigitalToken; 

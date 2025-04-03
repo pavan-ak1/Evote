@@ -10,6 +10,12 @@ const faceService = new FaceVerificationService();
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const DigitalToken = require('../models/digitalTokenModel');
+const mongoose = require('mongoose');
+
+// Ensure model is loaded only once
+if (!mongoose.models.DigitalToken) {
+    require('../models/digitalTokenModel');
+}
 
 // router.post("/verify-face", async (req, res) => {
 //     try {
