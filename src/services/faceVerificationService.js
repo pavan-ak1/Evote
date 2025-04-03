@@ -95,30 +95,53 @@ class FaceVerificationService {
 
     async registerFace(userId, faceImage) {
         try {
+            // Validate inputs
+            if (!userId || !faceImage) {
+                throw new Error('User ID and face image are required');
+            }
+
+            // Check Python service health
+            try {
+                await axios.get(`${this.baseURL}/health`, { timeout: 5000 });
+            } catch (healthError) {
+                console.error('Python service health check failed:', healthError);
+                throw new Error('Face registration service is unavailable');
+            }
+
             // First, validate the face using the Python service
             const validationResponse = await axios.post(`${this.baseURL}/register`, {
                 userId,
                 faceImage
+            }, {
+                timeout: 30000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
 
-            if (!validationResponse.data.success) {
-                throw new Error(validationResponse.data.message || 'Face validation failed');
+            if (!validationResponse.data || !validationResponse.data.success) {
+                throw new Error(validationResponse.data?.message || 'Face validation failed');
             }
 
             // If validation successful, upload to Cloudinary
             const uploadResponse = await cloudinary.uploader.upload(faceImage, {
                 folder: 'face-registration',
-                resource_type: 'auto'
+                resource_type: 'auto',
+                timeout: 30000
             });
+
+            if (!uploadResponse || !uploadResponse.secure_url) {
+                throw new Error('Failed to upload face image to Cloudinary');
+            }
 
             return {
                 success: true,
                 faceImageUrl: uploadResponse.secure_url,
-                verified: validationResponse.data.verified
+                verified: validationResponse.data.verified || false
             };
         } catch (error) {
             console.error('Face registration error:', error.response?.data || error.message);
-            throw error;
+            throw new Error(error.response?.data?.message || error.message || 'Face registration failed');
         }
     }
 

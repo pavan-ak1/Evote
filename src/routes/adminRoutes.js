@@ -635,18 +635,21 @@ router.put("/voters/:voterId/status", authenticateAdmin, async (req, res) => {
 router.post("/register-face", authenticateAdmin, async (req, res) => {
   try {
     const { image, userId } = req.body;
-    console.log("Registering/Updating face for user:", userId);
     
     if (!userId || !image) {
-      return res.status(400).json({ error: "User ID and face image are required" });
+      return res.status(400).json({ 
+        success: false,
+        error: "User ID and face image are required"
+      });
     }
     
-    // Fetch the user
+    // Find the user
     const user = await User.findById(userId);
-    
     if (!user) {
-      console.error("User not found for face registration:", userId);
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found"
+      });
     }
 
     // Delete old face image from Cloudinary if it exists
@@ -656,36 +659,41 @@ router.post("/register-face", authenticateAdmin, async (req, res) => {
         await cloudinary.uploader.destroy(`face-registration/${publicId}`);
       } catch (error) {
         console.error("Error deleting old face image:", error);
+        // Continue with registration even if deletion fails
       }
     }
     
-    // Upload new face image to Cloudinary
-    try {
-      const uploadResponse = await cloudinary.uploader.upload(image, {
-        folder: 'face-registration',
-        resource_type: 'auto'
+    // Register the new face
+    const registrationResult = await faceService.registerFace(userId, image);
+    
+    if (!registrationResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: registrationResult.error || "Face registration failed"
       });
-      
-      // Update user with new face image URL
-      user.faceImageUrl = uploadResponse.secure_url;
-      user.hasFaceRegistered = true;
-      user.faceVerifiedAt = null; // Reset verification status
-      user.faceRegisteredAt = new Date(); // Update registration timestamp
-      await user.save();
-      
-      return res.json({
-        success: true,
-        message: "Face registered/updated successfully",
-        faceImageUrl: uploadResponse.secure_url,
-        faceRegisteredAt: user.faceRegisteredAt
-      });
-    } catch (uploadError) {
-      console.error("Error uploading face image:", uploadError);
-      return res.status(500).json({ error: "Failed to upload face image" });
     }
+    
+    // Update user with new face image URL
+    user.faceImageUrl = registrationResult.faceImageUrl;
+    user.hasFaceRegistered = true;
+    user.faceVerifiedAt = null; // Reset verification status
+    user.faceRegisteredAt = new Date();
+    await user.save();
+    
+    return res.json({
+      success: true,
+      message: "Face registered successfully",
+      faceImageUrl: registrationResult.faceImageUrl,
+      faceRegisteredAt: user.faceRegisteredAt
+    });
+    
   } catch (error) {
     console.error("Face registration error:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ 
+      success: false,
+      error: error.message || "Face registration failed",
+      details: error.message
+    });
   }
 });
 
