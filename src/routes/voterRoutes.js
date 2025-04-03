@@ -320,17 +320,34 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
     const user = await User.findById(userId).populate('timeSlot');
     
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found" 
+      });
     }
     
     if (!user.timeSlot) {
-      return res.status(400).json({ error: "No time slot assigned" });
+      return res.status(400).json({ 
+        success: false,
+        error: "No time slot assigned" 
+      });
+    }
+    
+    // Check if face is registered
+    if (!user.hasFaceRegistered) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Face registration required before generating token" 
+      });
     }
     
     // Check if token already exists
     const existingToken = await DigitalToken.findOne({ voterId: userId });
     if (existingToken) {
-      return res.status(400).json({ error: "Token already generated" });
+      return res.status(400).json({ 
+        success: false,
+        error: "Token already generated" 
+      });
     }
     
     // Create token data
@@ -419,7 +436,8 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
       token: JSON.stringify(tokenData),
       qrCode: qrCode,
       pdfData: pdfBuffer.toString('base64'),
-      generatedAt: new Date()
+      generatedAt: new Date(),
+      status: 'active'
     });
     
     await digitalToken.save();
