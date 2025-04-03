@@ -377,11 +377,16 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
       }
     });
     
-    // Create PDF document
+    // Create PDF document with proper settings
     const doc = new PDFDocument({
       size: 'A4',
       margin: 50,
-      bufferPages: true
+      bufferPages: true,
+      autoFirstPage: true,
+      info: {
+        Title: 'Digital Voting Token',
+        Author: 'Voter Verification System'
+      }
     });
     
     // Create a buffer to store the PDF
@@ -397,7 +402,7 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
       doc.on('error', reject);
     });
     
-    // Add content to PDF
+    // Add content to PDF with proper encoding
     doc.font('Helvetica-Bold')
        .fontSize(20)
        .text('Digital Voting Token', { align: 'center' });
@@ -413,11 +418,17 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
     
     doc.moveDown(2);
     
-    // Add QR code
-    doc.image(qrCode, {
-      fit: [200, 200],
-      align: 'center'
-    });
+    // Add QR code with proper error handling
+    try {
+      const qrBuffer = Buffer.from(qrCode.split(',')[1], 'base64');
+      doc.image(qrBuffer, {
+        fit: [200, 200],
+        align: 'center'
+      });
+    } catch (qrError) {
+      console.error('Error adding QR code to PDF:', qrError);
+      throw new Error('Failed to add QR code to PDF');
+    }
     
     doc.moveDown(2);
     
@@ -436,7 +447,7 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
     // Wait for PDF to be generated
     const pdfBuffer = await pdfPromise;
     
-    // Create digital token record
+    // Create digital token record with proper encoding
     const digitalToken = new DigitalToken({
       voterId: userId,
       token: JSON.stringify(tokenData),
@@ -448,7 +459,8 @@ router.post("/generate-token", authMiddleware, async (req, res) => {
     
     await digitalToken.save();
     
-    // Send response with PDF data
+    // Send response with PDF data and proper headers
+    res.setHeader('Content-Type', 'application/json');
     res.json({
       success: true,
       message: "Digital token generated successfully",
