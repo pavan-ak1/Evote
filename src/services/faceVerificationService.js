@@ -6,6 +6,7 @@ class FaceVerificationService {
         this.baseURL = process.env.PYTHON_SERVICE_URL || 'https://voter-verify-face.onrender.com';
         this.maxRetries = 3;
         this.retryDelay = 5000; // 5 seconds
+        this.initialized = false;
     }
 
     async sleep(ms) {
@@ -16,15 +17,25 @@ class FaceVerificationService {
         try {
             // Try to connect to the service directly
             const response = await axios.get(this.baseURL, {
-                timeout: 5000,
+                timeout: 10000, // Increased timeout
                 headers: {
                     'Accept': 'application/json'
                 }
             });
-            return response.status === 200;
+
+            // Check if service is healthy
+            if (response.data && response.data.status === 'healthy') {
+                this.initialized = true;
+                return true;
+            }
+
+            // If service is not healthy, return false
+            console.error('Service health check failed:', response.data);
+            return false;
         } catch (error) {
             // If we get a 404 for /health, but the service is responding, consider it healthy
             if (error.response?.status === 404) {
+                this.initialized = true;
                 return true;
             }
             console.error('Face service health check failed:', error.message);
@@ -32,17 +43,28 @@ class FaceVerificationService {
         }
     }
 
+    async waitForService(maxAttempts = 3) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (await this.checkServiceHealth()) {
+                return true;
+            }
+            if (attempt < maxAttempts) {
+                await this.sleep(this.retryDelay);
+            }
+        }
+        return false;
+    }
+
     async registerFace(userId, faceImage) {
         let lastError = null;
         
+        // Wait for service to be ready
+        if (!this.initialized && !(await this.waitForService())) {
+            throw new Error('Face registration service is temporarily unavailable');
+        }
+
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                // Check service health first
-                const isHealthy = await this.checkServiceHealth();
-                if (!isHealthy) {
-                    throw new Error('Face registration service is temporarily unavailable');
-                }
-
                 // Validate inputs
                 if (!userId || !faceImage) {
                     throw new Error('User ID and face image are required');
@@ -89,6 +111,14 @@ class FaceVerificationService {
             } catch (error) {
                 console.error(`Registration attempt ${attempt} failed:`, error.response?.data || error.message);
                 lastError = error;
+                
+                // If service is not responding, try to reinitialize
+                if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+                    this.initialized = false;
+                    if (await this.waitForService()) {
+                        continue;
+                    }
+                }
                 
                 if (attempt < this.maxRetries) {
                     await this.sleep(this.retryDelay);

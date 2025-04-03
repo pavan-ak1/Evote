@@ -11,14 +11,41 @@ import json
 from io import BytesIO
 from PIL import Image
 import io
+import time
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Backend API configuration
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 PORT = int(os.environ.get('PORT', 5000))
+
+# Initialize DeepFace models
+def initialize_models():
+    try:
+        print("Initializing DeepFace models...")
+        # Test DeepFace with a simple operation
+        DeepFace.verify(
+            img1_path="temp1.jpg",
+            img2_path="temp1.jpg",
+            model_name='VGG-Face',
+            detector_backend='opencv',
+            enforce_detection=False
+        )
+        print("DeepFace models initialized successfully")
+        return True
+    except Exception as e:
+        print(f"Error initializing DeepFace models: {str(e)}")
+        return False
+
+# Create temp directory
+temp_dir = 'temp'
+if not os.path.exists(temp_dir):
+    os.makedirs(temp_dir)
+
+# Initialize models on startup
+initialize_models()
 
 def download_image_from_url(url):
     try:
@@ -89,11 +116,29 @@ def check_face_quality(image):
 
 @app.route('/')
 def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'service': 'face-verification',
-        'version': '1.0.0'
-    })
+    try:
+        # Check if models are initialized
+        if not initialize_models():
+            return jsonify({
+                'status': 'unhealthy',
+                'service': 'face-verification',
+                'version': '1.0.0',
+                'error': 'Models not initialized'
+            }), 503
+        
+        return jsonify({
+            'status': 'healthy',
+            'service': 'face-verification',
+            'version': '1.0.0',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'service': 'face-verification',
+            'version': '1.0.0',
+            'error': str(e)
+        }), 503
 
 @app.route('/verify', methods=['POST'])
 def verify_face():
@@ -106,11 +151,6 @@ def verify_face():
                 'success': False,
                 'error': 'Both images are required'
             }), 400
-        
-        # Create temp directory if it doesn't exist
-        temp_dir = 'temp'
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
         
         # Process first image (captured image)
         try:
@@ -272,11 +312,6 @@ def register_face():
                 'message': f'Error processing image: {str(e)}'
             }), 400
         
-        # Create temp directory if it doesn't exist
-        temp_dir = 'temp'
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-        
         # Save image temporarily for DeepFace
         temp_path = os.path.join(temp_dir, f'temp_register_{data["userId"]}.jpg')
         cv2.imwrite(temp_path, opencv_image)
@@ -296,7 +331,7 @@ def register_face():
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             
-            # Return success response with face embedding
+            # Return success response
             return jsonify({
                 'success': True,
                 'message': 'Face registered successfully',
