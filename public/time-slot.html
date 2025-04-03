@@ -193,10 +193,11 @@
         slotDiv.innerHTML = `
           <div>
             <strong>${slot.startTime} - ${slot.endTime}</strong><br>
-            Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}
+            Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}<br>
+            <small>Slot ID: ${slot._id}</small>
           </div>
           <div>
-            <button class="book-btn" data-slot-id="${slot._id}" ${
+            <button class="book-btn" onclick="bookSlot('${slot._id}')" ${
               slot.bookedVoters.length >= slot.maxCapacity ? "disabled" : ""
             }>
               ${slot.bookedVoters.length >= slot.maxCapacity ? "Slot Full" : "Book Slot"}
@@ -205,21 +206,16 @@
         `;
         slotsContainer.appendChild(slotDiv);
       });
-
-      // Attach event listeners to all non-disabled "Book Slot" buttons
-      document.querySelectorAll(".book-btn:not([disabled])").forEach(button => {
-        button.addEventListener("click", bookSlot);
-      });
     }
 
     /***********************************
      * BOOK A TIME SLOT
      ***********************************/
-    async function bookSlot(event) {
-      const button = event.target;
-      const slotId = button.getAttribute("data-slot-id");
-      button.disabled = true;
-      button.innerText = "Booking...";
+    async function bookSlot(slotId) {
+      if (!slotId) {
+        showMessage('Slot ID is required', 'error');
+        return;
+      }
 
       try {
         const token = localStorage.getItem("token");
@@ -247,18 +243,12 @@
         }
 
         const data = await response.json();
-        alert("Slot booked successfully!");
-        await fetchBookedSlots();
-        await fetchSlots(slotDateInput.value);
+        showMessage("Slot booked successfully!", "success");
+        fetchSlots(document.getElementById("slot-date").value); // Refresh the slots list
+        
       } catch (error) {
         console.error("Error booking slot:", error);
-        if (error.message.includes("Authentication failed")) {
-          window.location.href = "/login.html";
-        } else {
-          alert(error.message);
-        }
-        button.disabled = false;
-        button.innerText = "Book Slot";
+        showMessage(error.message || "Failed to book slot", "error");
       }
     }
 
@@ -389,6 +379,18 @@
         window.location.href = "/dashboard.html";
       });
     });
+
+    function showMessage(message, type) {
+      const successMessage = document.getElementById("success-message");
+      successMessage.textContent = message;
+      successMessage.style.display = "block";
+      successMessage.style.backgroundColor = type === "success" ? "#28a745" : "#dc3545";
+      
+      // Hide message after 5 seconds
+      setTimeout(() => {
+        successMessage.style.display = "none";
+      }, 5000);
+    }
   </script>
 </body>
 </html>
