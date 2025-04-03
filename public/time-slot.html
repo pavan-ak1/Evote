@@ -150,7 +150,7 @@
           return;
         }
 
-        const response = await fetch(`/api/slots/available?date=${date}`, {
+        const response = await fetch(`https://voter-verify-backend.onrender.com/api/slots/available?date=${date}`, {
           headers: {
             "Authorization": `Bearer ${token}`
           }
@@ -228,7 +228,7 @@
           return;
         }
 
-        const response = await fetch("/api/slots/book", {
+        const response = await fetch("https://voter-verify-backend.onrender.com/api/slots/book", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

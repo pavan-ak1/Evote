@@ -176,36 +176,39 @@ router.post('/verify-token', authMiddleware, async (req, res) => {
 // Register face
 router.post('/face/register', authMiddleware, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        const { userId, faceImage } = req.body;
+        
+        if (!userId || !faceImage) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "User ID and face image are required" 
+            });
         }
 
-        const { faceImage } = req.body;
-        if (!faceImage) {
-            return res.status(400).json({ message: 'Face image is required' });
+        console.log('Starting face registration for user:', userId);
+        
+        const result = await faceService.registerFace(userId, faceImage);
+        
+        if (!result.success) {
+            console.error('Face registration failed:', result.error);
+            return res.status(500).json({ 
+                success: false, 
+                message: "Error registering face",
+                error: result.error 
+            });
         }
 
-        // Register face with the face verification service
-        const result = await faceService.registerFace(user.id, faceImage);
-
-        // Update user record with face image and URL
-        user.faceImage = faceImage;
-        user.faceImageUrl = result.faceImageUrl;
-        user.hasFaceRegistered = true;
-        user.faceRegisteredAt = new Date();
-        await user.save();
-
+        console.log('Face registration successful for user:', userId);
         res.json({ 
-            success: true,
-            message: 'Face registered successfully',
-            faceImageUrl: result.faceImageUrl
+            success: true, 
+            message: "Face registered successfully",
+            embedding: result.embedding 
         });
     } catch (error) {
         console.error('Face registration error:', error);
         res.status(500).json({ 
-            success: false,
-            message: 'Error registering face',
+            success: false, 
+            message: "Error registering face",
             error: error.message 
         });
     }
