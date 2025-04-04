@@ -20,7 +20,7 @@ if gpus:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import face_recognition
+from deepface import DeepFace
 import numpy as np
 import base64
 import cv2
@@ -74,17 +74,17 @@ def manage_memory():
         logger.warning(f"High memory usage detected: {memory_usage:.2f}MB")
         gc.collect()  # Force garbage collection
 
-def initialize_face_recognition():
-    """Initialize face recognition with a minimal test image"""
+def initialize_models():
+    """Initialize DeepFace models with a minimal test image"""
     try:
         # Create a minimal test image
         test_image = np.zeros((16, 16, 3), dtype=np.uint8)
-        # Test face recognition
-        face_recognition.face_encodings(test_image)
-        logger.info("Face recognition initialized successfully")
+        # Test DeepFace
+        DeepFace.verify(test_image, test_image, model_name='Facenet')
+        logger.info("DeepFace models initialized successfully")
         return True
     except Exception as e:
-        logger.error(f"Error initializing face recognition: {str(e)}")
+        logger.error(f"Error initializing DeepFace models: {str(e)}")
         return False
 
 def process_request(func):
@@ -95,7 +95,7 @@ def process_request(func):
             request_queue.put(True, timeout=30)  # 30 second timeout
             
             # Initialize models if needed
-            if not models_initialized and not initialize_face_recognition():
+            if not models_initialized and not initialize_models():
                 return jsonify({
                     'success': False,
                     'message': 'Service is initializing, please try again in a few seconds'
@@ -148,35 +148,24 @@ def verify_face():
         # Convert BGR to RGB
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
-        # Get face encodings
-        face_encodings = face_recognition.face_encodings(rgb_img)
-        
-        if not face_encodings:
-            return jsonify({
-                'success': False,
-                'message': 'No face detected in the image'
-            }), 400
+        try:
+            # Verify face using DeepFace
+            result = DeepFace.verify(rgb_img, rgb_img, model_name='Facenet')
             
-        # Compare with itself (for testing)
-        face_encoding = face_encodings[0]
-        matches = face_recognition.compare_faces([face_encoding], face_encoding)
-        
-        # Calculate face distance
-        face_distances = face_recognition.face_distance([face_encoding], face_encoding)
-        distance = float(face_distances[0])
-        
-        # Define threshold (0.6 is a common threshold)
-        threshold = 0.6
-        
-        # Clean up memory
-        manage_memory()
-        
-        return jsonify({
-            'success': True,
-            'verified': matches[0],
-            'distance': distance,
-            'threshold': threshold
-        })
+            return jsonify({
+                'success': True,
+                'verified': result['verified'],
+                'distance': float(result['distance']),
+                'threshold': float(result['threshold'])
+            })
+        except Exception as e:
+            if "No face detected" in str(e):
+                return jsonify({
+                    'success': False,
+                    'message': 'No face detected in the image'
+                }), 400
+            raise e
+            
     except Exception as e:
         logger.error(f"Verification error: {str(e)}")
         return jsonify({
@@ -202,7 +191,7 @@ def register_face():
         
         # Verify face
         try:
-            face_recognition.face_encodings(img)
+            DeepFace.verify(img, img, model_name='Facenet')
         except Exception as e:
             return jsonify({
                 'success': False,
@@ -268,10 +257,10 @@ def verify_voting():
             current_image = base64_to_image(data['image'])
             current_image.save('temp_current.jpg')
 
-            # Verify faces using face_recognition
-            registered_face_encoding = face_recognition.face_encodings(np.array(Image.open('temp_registered.jpg')))[0]
-            current_face_encoding = face_recognition.face_encodings(np.array(current_image))[0]
-            face_distances = face_recognition.face_distance([registered_face_encoding], current_face_encoding)
+            # Verify faces using DeepFace
+            registered_face_encoding = DeepFace.encode(np.array(Image.open('temp_registered.jpg')))[0]
+            current_face_encoding = DeepFace.encode(np.array(current_image))[0]
+            face_distances = DeepFace.face_distance([registered_face_encoding], current_face_encoding)
             distance = float(face_distances[0])
             
             # Define threshold for face match (0.6 = 60%)
@@ -409,9 +398,9 @@ def check_face_quality(image):
     return True, "Image quality is good"
 
 if __name__ == '__main__':
-    # Initialize face recognition
-    if not initialize_face_recognition():
-        logger.error("Failed to initialize face recognition")
+    # Initialize models
+    if not initialize_models():
+        logger.error("Failed to initialize models")
         exit(1)
     
     # Get port from environment variable
