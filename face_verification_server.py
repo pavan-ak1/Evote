@@ -12,6 +12,7 @@ from io import BytesIO
 from PIL import Image
 import io
 import time
+import uvicorn
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -19,33 +20,51 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Backend API configuration
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
-PORT = int(os.environ.get('PORT', 5000))
+
+# Track initialization status globally
+models_initialized = False
 
 # Initialize DeepFace models
 def initialize_models():
+    global models_initialized
     try:
         print("Initializing DeepFace models...")
-        # Test DeepFace with a simple operation
+        
+        # Create a simple test image
+        test_image = np.zeros((100, 100, 3), dtype=np.uint8)
+        test_image_path = os.path.join(temp_dir, 'test_init.jpg')
+        cv2.imwrite(test_image_path, test_image)
+        
+        # Test DeepFace with the test image
         DeepFace.verify(
-            img1_path="temp1.jpg",
-            img2_path="temp1.jpg",
+            img1_path=test_image_path,
+            img2_path=test_image_path,
             model_name='VGG-Face',
             detector_backend='opencv',
             enforce_detection=False
         )
+        
+        # Clean up test image
+        if os.path.exists(test_image_path):
+            os.remove(test_image_path)
+            
         print("DeepFace models initialized successfully")
+        models_initialized = True
         return True
     except Exception as e:
         print(f"Error initializing DeepFace models: {str(e)}")
+        models_initialized = False
         return False
 
 # Create temp directory
 temp_dir = 'temp'
 if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
+    print(f"Created temp directory: {temp_dir}")
 
 # Initialize models on startup
-initialize_models()
+if not initialize_models():
+    print("Warning: Failed to initialize DeepFace models. The service may not function properly.")
 
 def download_image_from_url(url):
     try:
@@ -114,30 +133,26 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-@app.route('/')
+@app.route('/', methods=['GET', 'HEAD'])
 def health_check():
     try:
-        # Check if models are initialized
-        if not initialize_models():
-            return jsonify({
-                'status': 'unhealthy',
-                'service': 'face-verification',
-                'version': '1.0.0',
-                'error': 'Models not initialized'
-            }), 503
-        
+        # For HEAD requests, just return 200 if service is initialized
+        if request.method == 'HEAD':
+            return '', 200 if models_initialized else 503
+            
+        # For GET requests, return full health status
         return jsonify({
-            'status': 'healthy',
-            'service': 'face-verification',
-            'version': '1.0.0',
-            'timestamp': datetime.now().isoformat()
-        })
+            'status': 'healthy' if models_initialized else 'unhealthy',
+            'initialized': models_initialized,
+            'timestamp': time.time(),
+            'message': 'Service is running' if models_initialized else 'Service is initializing'
+        }), 200 if models_initialized else 503
     except Exception as e:
+        print(f"Health check error: {str(e)}")
         return jsonify({
-            'status': 'unhealthy',
-            'service': 'face-verification',
-            'version': '1.0.0',
-            'error': str(e)
+            'status': 'error',
+            'error': str(e),
+            'timestamp': time.time()
         }), 503
 
 @app.route('/verify', methods=['POST'])
@@ -489,4 +504,12 @@ def verify_voting():
         }), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=PORT)
+    # Initialize models
+    initialize_models()
+    
+    # Get port from environment variable or use default
+    port = int(os.environ.get('PORT', 10000))
+    
+    # Start the server
+    print(f"Starting server on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
