@@ -48,13 +48,15 @@ def manage_memory():
     memory_info = process.memory_info()
     current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
     
-    if current_memory > 300:  # If using more than 300MB
+    if current_memory > 250:  # Reduced threshold to 250MB
         print(f"High memory usage detected: {current_memory:.2f}MB")
         gc.collect()  # Force garbage collection
         tf.keras.backend.clear_session()  # Clear TensorFlow session
         # Clear any cached models
         if 'model' in globals():
             del globals()['model']
+        gc.collect()
+        # Force garbage collection again
         gc.collect()
 
 def initialize_models():
@@ -69,18 +71,19 @@ def initialize_models():
             manage_memory()
             
             # Create a minimal test image
-            test_image = np.zeros((50, 50, 3), dtype=np.uint8)  # Reduced size
+            test_image = np.zeros((32, 32, 3), dtype=np.uint8)  # Further reduced size
             test_image_path = os.path.join(temp_dir, 'test_init.jpg')
             cv2.imwrite(test_image_path, test_image)
             
-            # Test with minimal configuration
+            # Test with minimal configuration and reduced model size
             DeepFace.verify(
                 img1_path=test_image_path,
                 img2_path=test_image_path,
                 model_name='VGG-Face',
-                detector_backend='opencv',
+                detector_backend='skip',  # Skip face detection for initialization
                 enforce_detection=False,
-                distance_metric='cosine'
+                distance_metric='cosine',
+                model=None  # Don't load model weights yet
             )
             
             # Clean up immediately
@@ -99,7 +102,7 @@ def initialize_models():
 
 def process_request(func):
     """Decorator to handle request queuing and memory management"""
-    def wrapper(*args, **kwargs):
+    def wrapped(*args, **kwargs):
         try:
             # Wait for queue slot
             request_queue.put(True, timeout=30)  # 30 second timeout
@@ -128,7 +131,8 @@ def process_request(func):
             except:
                 pass
             manage_memory()
-    return wrapper
+    wrapped.__name__ = func.__name__  # Preserve the original function name
+    return wrapped
 
 @app.route('/', methods=['GET', 'HEAD'])
 def health_check():
