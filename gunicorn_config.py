@@ -1,5 +1,14 @@
 import os
 import multiprocessing
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Get port from environment variable
+port = os.environ.get('PORT', '5000')
+logger.info(f"Using port: {port}")
 
 # Number of workers
 workers = 1  # Single worker to minimize memory usage
@@ -36,9 +45,9 @@ accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 
-# Bind address - explicitly use the PORT environment variable
-port = os.environ.get('PORT', '5000')
+# Bind address
 bind = f"0.0.0.0:{port}"
+logger.info(f"Binding to: {bind}")
 
 # Worker class settings
 worker_connections = 50  # Reduced connections to minimize memory usage

@@ -64,8 +64,10 @@ model_lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 
 # Set DeepFace model directory to a writable location
-DEEPFACE_DIR = os.path.join(tempfile.gettempdir(), '.deepface')
+DEEPFACE_DIR = os.path.join(os.getcwd(), '.deepface')
+os.makedirs(DEEPFACE_DIR, exist_ok=True)
 os.environ['DEEPFACE_HOME'] = DEEPFACE_DIR
+logger.info(f"DeepFace directory set to: {DEEPFACE_DIR}")
 
 def manage_memory():
     """Aggressive memory management"""
