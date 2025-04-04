@@ -142,7 +142,7 @@ def process_request(func):
     return wrapped
 
 @app.route('/', methods=['GET'])
-def health_check():
+def root_health_check():
     return jsonify({
         'status': 'healthy',
         'message': 'Service is running'
