@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     libatlas3-base \
     curl \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -73,9 +74,9 @@ ENV DEEPFACE_HOME=/app/deepface_weights
 # Expose the port
 EXPOSE 5001
 
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+# Add healthcheck with better timeout and retry settings
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
-# Command to run the application
-CMD ["gunicorn", "-c", "gunicorn_config.py", "face_verification_server:app"] 
+# Command to run the application with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--timeout", "120", "face_verification_server:app"] 

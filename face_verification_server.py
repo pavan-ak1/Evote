@@ -464,11 +464,17 @@ if __name__ == '__main__':
     # Get port from environment variable with better error handling
     try:
         port = int(os.environ.get('PORT', 5001))
-        logger.info(f"Starting server on port {port}...")
+        host = '0.0.0.0'
+        
+        logger.info(f"Starting server on {host}:{port}...")
+        logger.info(f"Environment variables:")
+        logger.info(f"PORT: {port}")
+        logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
+        logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
         
         # Force the server to bind to all interfaces
         app.run(
-            host='0.0.0.0',
+            host=host,
             port=port,
             debug=False,
             threaded=True,

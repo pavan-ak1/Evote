@@ -5,6 +5,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Bind to all interfaces
+bind = "0.0.0.0:5001"
+
 # Number of workers
 workers = 1  # Single worker to minimize memory usage
 
@@ -39,6 +42,16 @@ worker_max_memory_percent = 50  # 50% of available memory
 accesslog = "-"
 errorlog = "-"
 loglevel = "info"
+
+# Enable keep-alive
+keepalive = 5  # 5 seconds
+
+# Enable daemon mode
+daemon = False
+
+# Enable error logging
+capture_output = True
+enable_stdio_inheritance = True
 
 # Worker class settings
 worker_connections = 50  # Reduced connections to minimize memory usage
