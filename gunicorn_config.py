@@ -17,7 +17,7 @@ def is_port_in_use(port):
 
 # Get port from environment variable with validation
 try:
-    port = int(os.environ.get('PORT', '5000'))
+    port = int(os.environ.get('PORT', '5001'))  # Default to 5001
     if port < 1 or port > 65535:
         raise ValueError(f"Invalid port number: {port}")
     
@@ -35,7 +35,7 @@ try:
     logger.info(f"Using port: {port}")
 except Exception as e:
     logger.error(f"Error with PORT environment variable: {str(e)}")
-    port = 5000  # Fallback to default port
+    port = 5001  # Fallback to 5001
     logger.info(f"Falling back to default port: {port}")
 
 # Number of workers
@@ -79,7 +79,7 @@ try:
     logger.info(f"Binding to: {bind}")
 except Exception as e:
     logger.error(f"Error setting bind address: {str(e)}")
-    bind = "0.0.0.0:5000"  # Fallback to default
+    bind = "0.0.0.0:5001"  # Fallback to 5001
     logger.info(f"Falling back to default bind address: {bind}")
 
 # Worker class settings
