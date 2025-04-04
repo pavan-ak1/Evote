@@ -26,6 +26,8 @@ import time
 import uvicorn
 import gc  # Garbage collection
 import psutil  # Process and system utilities
+import threading
+from queue import Queue
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -34,139 +36,106 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 
-# Track initialization status globally
+# Global variables for memory management
+request_queue = Queue(maxsize=1)  # Limit concurrent requests
 models_initialized = False
+model_lock = threading.Lock()
 
-# Memory management function
 def manage_memory():
+    """Aggressive memory management"""
     gc.collect()  # Run garbage collection
     process = psutil.Process()
     memory_info = process.memory_info()
-    if memory_info.rss > 400 * 1024 * 1024:  # If using more than 400MB
-        print(f"High memory usage detected: {memory_info.rss / 1024 / 1024:.2f}MB")
+    current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
+    
+    if current_memory > 300:  # If using more than 300MB
+        print(f"High memory usage detected: {current_memory:.2f}MB")
         gc.collect()  # Force garbage collection
         tf.keras.backend.clear_session()  # Clear TensorFlow session
+        # Clear any cached models
+        if 'model' in globals():
+            del globals()['model']
+        gc.collect()
 
-# Initialize models with memory optimization
 def initialize_models():
+    """Initialize models with memory optimization"""
     global models_initialized
-    try:
-        print("Initializing DeepFace models...")
-        manage_memory()
-        
-        # Create a simple test image
-        test_image = np.zeros((100, 100, 3), dtype=np.uint8)
-        test_image_path = os.path.join(temp_dir, 'test_init.jpg')
-        cv2.imwrite(test_image_path, test_image)
-        
-        # Test DeepFace with the test image
-        DeepFace.verify(
-            img1_path=test_image_path,
-            img2_path=test_image_path,
-            model_name='VGG-Face',
-            detector_backend='opencv',
-            enforce_detection=False
-        )
-        
-        # Clean up test image
-        if os.path.exists(test_image_path):
-            os.remove(test_image_path)
+    with model_lock:
+        if models_initialized:
+            return True
             
-        print("DeepFace models initialized successfully")
-        models_initialized = True
-        manage_memory()
-        return True
-    except Exception as e:
-        print(f"Error initializing DeepFace models: {str(e)}")
-        models_initialized = False
-        manage_memory()
-        return False
-
-# Create temp directory
-temp_dir = 'temp'
-if not os.path.exists(temp_dir):
-    os.makedirs(temp_dir)
-    print(f"Created temp directory: {temp_dir}")
-
-# Initialize models on startup
-if not initialize_models():
-    print("Warning: Failed to initialize DeepFace models. The service may not function properly.")
-
-def download_image_from_url(url):
-    try:
-        print(f"Downloading image from URL: {url}")
-        response = requests.get(url)
-        if response.status_code == 200:
-            image = Image.open(BytesIO(response.content))
-            print(f"Successfully downloaded image, size: {image.size}")
-            return image
-        else:
-            raise Exception(f"Failed to download image from URL: {response.status_code}")
-    except Exception as e:
-        print(f"Error downloading image: {str(e)}")
-        raise Exception(f"Error downloading image: {str(e)}")
-
-def base64_to_image(base64_string):
-    try:
-        print("Converting base64 to image")
-        if ',' in base64_string:
-            base64_string = base64_string.split(',')[1]
-        
-        image_data = base64.b64decode(base64_string)
-        image = Image.open(BytesIO(image_data))
-        
-        # Convert RGBA to RGB if necessary
-        if image.mode == 'RGBA':
-            image = image.convert('RGB')
+        try:
+            print("Initializing DeepFace models...")
+            manage_memory()
             
-        print(f"Successfully converted base64 to image, size: {image.size}")
-        return image
-    except Exception as e:
-        print(f"Error converting base64 to image: {str(e)}")
-        raise Exception(f"Error converting base64 to image: {str(e)}")
+            # Create a minimal test image
+            test_image = np.zeros((50, 50, 3), dtype=np.uint8)  # Reduced size
+            test_image_path = os.path.join(temp_dir, 'test_init.jpg')
+            cv2.imwrite(test_image_path, test_image)
+            
+            # Test with minimal configuration
+            DeepFace.verify(
+                img1_path=test_image_path,
+                img2_path=test_image_path,
+                model_name='VGG-Face',
+                detector_backend='opencv',
+                enforce_detection=False,
+                distance_metric='cosine'
+            )
+            
+            # Clean up immediately
+            if os.path.exists(test_image_path):
+                os.remove(test_image_path)
+            
+            models_initialized = True
+            print("DeepFace models initialized successfully")
+            manage_memory()
+            return True
+        except Exception as e:
+            print(f"Error initializing DeepFace models: {str(e)}")
+            models_initialized = False
+            manage_memory()
+            return False
 
-def check_face_quality(image):
-    # Convert PIL Image to numpy array
-    image_np = np.array(image)
-    
-    # Convert to grayscale if needed
-    if len(image_np.shape) == 3:
-        gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-    else:
-        gray = image_np
-    
-    # Calculate brightness
-    brightness = np.mean(gray)
-    
-    # Calculate contrast
-    contrast = np.std(gray)
-    
-    # Calculate sharpness using Laplacian variance
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    sharpness = np.var(laplacian)
-    
-    # Define thresholds
-    BRIGHTNESS_THRESHOLD = 40
-    CONTRAST_THRESHOLD = 20
-    SHARPNESS_THRESHOLD = 100
-    
-    if brightness < BRIGHTNESS_THRESHOLD:
-        return False, "Image is too dark"
-    if contrast < CONTRAST_THRESHOLD:
-        return False, "Image has low contrast"
-    if sharpness < SHARPNESS_THRESHOLD:
-        return False, "Image is not sharp enough"
-    
-    return True, "Image quality is good"
+def process_request(func):
+    """Decorator to handle request queuing and memory management"""
+    def wrapper(*args, **kwargs):
+        try:
+            # Wait for queue slot
+            request_queue.put(True, timeout=30)  # 30 second timeout
+            
+            # Initialize models if needed
+            if not models_initialized and not initialize_models():
+                return jsonify({
+                    'success': False,
+                    'message': 'Service is initializing, please try again in a few seconds'
+                }), 503
+            
+            # Process request
+            manage_memory()
+            result = func(*args, **kwargs)
+            manage_memory()
+            return result
+        except Exception as e:
+            print(f"Request processing error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': str(e)
+            }), 500
+        finally:
+            try:
+                request_queue.get_nowait()  # Release queue slot
+            except:
+                pass
+            manage_memory()
+    return wrapper
 
 @app.route('/', methods=['GET', 'HEAD'])
 def health_check():
     try:
-        # For HEAD requests, just return 200 if service is initialized
         if request.method == 'HEAD':
             return '', 200 if models_initialized else 503
             
-        # For GET requests, return full health status
         return jsonify({
             'status': 'healthy' if models_initialized else 'unhealthy',
             'initialized': models_initialized,
@@ -182,219 +151,84 @@ def health_check():
         }), 503
 
 @app.route('/verify', methods=['POST'])
+@process_request
 def verify_face():
     try:
-        manage_memory()
         data = request.get_json()
-        print("Received verification request:", data.keys())
-        
-        if not data or 'image1' not in data or 'image2' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Both images are required'
-            }), 400
-        
-        # Process first image (captured image)
-        try:
-            print("Processing captured image...")
-            image1 = base64_to_image(data['image1'])
-            
-            # Save temporarily for DeepFace
-            temp_path1 = os.path.join(temp_dir, 'temp1.jpg')
-            image1.save(temp_path1, 'JPEG')
-            print("Successfully processed captured image")
-        except Exception as e:
-            print("Error processing captured image:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error processing captured image: {str(e)}'
-            }), 400
-        
-        # Process second image (registered image)
-        try:
-            print("Processing registered image...")
-            if isinstance(data['image2'], str):
-                if data['image2'].startswith('http'):
-                    # Download from URL
-                    image2 = download_image_from_url(data['image2'])
-                else:
-                    # Process base64
-                    image2 = base64_to_image(data['image2'])
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Invalid image2 format'
-                }), 400
-            
-            # Save temporarily for DeepFace
-            temp_path2 = os.path.join(temp_dir, 'temp2.jpg')
-            image2.save(temp_path2, 'JPEG')
-            print("Successfully processed registered image")
-        except Exception as e:
-            print("Error processing registered image:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error processing registered image: {str(e)}'
-            }), 400
-        
-        # Verify faces using DeepFace with multiple models for increased accuracy
-        try:
-            print("Verifying faces with DeepFace...")
-            
-            # Use multiple models for verification
-            models = ['VGG-Face', 'Facenet', 'OpenFace']
-            verification_results = []
-            
-            for model in models:
-                result = DeepFace.verify(
-                    img1_path=temp_path1,
-                    img2_path=temp_path2,
-                    model_name=model,
-                    detector_backend='opencv',
-                    distance_metric='cosine',
-                    enforce_detection=True,
-                    align=True
-                )
-                verification_results.append(1 - result['distance'])  # Convert distance to similarity
-            
-            # Clean up temporary files
-            if os.path.exists(temp_path1):
-                os.remove(temp_path1)
-            if os.path.exists(temp_path2):
-                os.remove(temp_path2)
-            
-            # Calculate average similarity across models
-            avg_similarity = sum(verification_results) / len(verification_results)
-            print(f"Average similarity across models: {avg_similarity}")
-            
-            # Define more reasonable verification thresholds
-            VERY_HIGH_CONFIDENCE = 0.85  # 85% similarity
-            HIGH_CONFIDENCE = 0.80  # 80% similarity
-            MEDIUM_CONFIDENCE = 0.75
-            
-            # Determine confidence level
-            if avg_similarity >= VERY_HIGH_CONFIDENCE:
-                confidence_level = 'VERY_HIGH'
-            elif avg_similarity >= HIGH_CONFIDENCE:
-                confidence_level = 'HIGH'
-            elif avg_similarity >= MEDIUM_CONFIDENCE:
-                confidence_level = 'MEDIUM'
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Face verification failed: Insufficient similarity',
-                    'matchPercentage': avg_similarity,
-                    'details': {
-                        'average_similarity': avg_similarity,
-                        'model_similarities': dict(zip(models, verification_results))
-                    }
-                }), 401
-            
-            verification_status = {
-                'success': True,
-                'matchPercentage': avg_similarity,
-                'confidenceLevel': confidence_level,
-                'modelResults': {model: score for model, score in zip(models, verification_results)},
-                'recommendations': []
-            }
-            
-            return jsonify(verification_status)
-        except Exception as e:
-            # Clean up temporary files
-            if os.path.exists(temp_path1):
-                os.remove(temp_path1)
-            if os.path.exists(temp_path2):
-                os.remove(temp_path2)
-                
-            print("Error in DeepFace verification:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error in face verification: {str(e)}'
-            }), 500
-        
-    except Exception as e:
-        print(f"Face verification error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-    finally:
-        manage_memory()
-
-@app.route('/register', methods=['POST'])
-def register_face():
-    try:
-        manage_memory()
-        data = request.get_json()
-        print("Received registration request")
-        
         if not data or 'userId' not in data or 'faceImage' not in data:
             return jsonify({
                 'success': False,
-                'message': 'User ID and face image are required'
+                'message': 'Missing required fields: userId and faceImage'
             }), 400
 
-        print("Processing face image...")
-        try:
-            # Remove data URL prefix if present
-            face_image = data['faceImage']
-            if ',' in face_image:
-                face_image = face_image.split(',')[1]
-            
-            # Decode base64 string
-            img_data = base64.b64decode(face_image)
-            nparr = np.frombuffer(img_data, np.uint8)
-            opencv_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if opencv_image is None:
-                raise Exception("Failed to decode image")
-                
-            print("Image decoded successfully")
-        except Exception as e:
-            print(f"Error processing image: {str(e)}")
+        # Process image in memory
+        image_data = data['faceImage'].split(',')[1] if ',' in data['faceImage'] else data['faceImage']
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Verify face
+        result = DeepFace.verify(
+            img1_path=img,
+            img2_path=img,
+            model_name='VGG-Face',
+            detector_backend='opencv',
+            enforce_detection=True
+        )
+
+        return jsonify({
+            'success': True,
+            'verified': result['verified'],
+            'distance': float(result['distance']),
+            'threshold': float(result['threshold'])
+        })
+    except Exception as e:
+        print(f"Verification error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error verifying face: {str(e)}'
+        }), 500
+
+@app.route('/register', methods=['POST'])
+@process_request
+def register_face():
+    try:
+        data = request.get_json()
+        if not data or 'userId' not in data or 'faceImage' not in data:
             return jsonify({
                 'success': False,
-                'message': f'Error processing image: {str(e)}'
+                'message': 'Missing required fields: userId and faceImage'
             }), 400
+
+        # Process image in memory
+        image_data = data['faceImage'].split(',')[1] if ',' in data['faceImage'] else data['faceImage']
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Save image temporarily for DeepFace
-        temp_path = os.path.join(temp_dir, f'temp_register_{data["userId"]}.jpg')
-        cv2.imwrite(temp_path, opencv_image)
-        
+        # Verify face
         try:
-            # Verify that DeepFace can detect and process the face
-            result = DeepFace.verify(
-                img1_path=temp_path,
-                img2_path=temp_path,
+            DeepFace.verify(
+                img1_path=img,
+                img2_path=img,
                 model_name='VGG-Face',
                 detector_backend='opencv',
-                enforce_detection=True,
-                align=True
+                enforce_detection=True
             )
-            
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            
-            # Return success response
-            return jsonify({
-                'success': True,
-                'message': 'Face registered successfully',
-                'userId': data['userId'],
-                'verified': True
-            })
         except Exception as e:
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                
-            print(f"Error in face registration: {str(e)}")
             return jsonify({
                 'success': False,
-                'message': f'Error in face registration: {str(e)}'
+                'message': f'Face verification failed: {str(e)}'
             }), 400
-    finally:
-        manage_memory()
+
+        return jsonify({
+            'success': True,
+            'message': 'Face registered successfully'
+        })
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error registering face: {str(e)}'
+        }), 500
 
 @app.route('/verify-voting', methods=['POST'])
 def verify_voting():
@@ -528,19 +362,93 @@ def verify_voting():
             'error': str(e)
         }), 500
 
+def download_image_from_url(url):
+    try:
+        print(f"Downloading image from URL: {url}")
+        response = requests.get(url)
+        if response.status_code == 200:
+            image = Image.open(BytesIO(response.content))
+            print(f"Successfully downloaded image, size: {image.size}")
+            return image
+        else:
+            raise Exception(f"Failed to download image from URL: {response.status_code}")
+    except Exception as e:
+        print(f"Error downloading image: {str(e)}")
+        raise Exception(f"Error downloading image: {str(e)}")
+
+def base64_to_image(base64_string):
+    try:
+        print("Converting base64 to image")
+        if ',' in base64_string:
+            base64_string = base64_string.split(',')[1]
+        
+        image_data = base64.b64decode(base64_string)
+        image = Image.open(BytesIO(image_data))
+        
+        # Convert RGBA to RGB if necessary
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
+            
+        print(f"Successfully converted base64 to image, size: {image.size}")
+        return image
+    except Exception as e:
+        print(f"Error converting base64 to image: {str(e)}")
+        raise Exception(f"Error converting base64 to image: {str(e)}")
+
+def check_face_quality(image):
+    # Convert PIL Image to numpy array
+    image_np = np.array(image)
+    
+    # Convert to grayscale if needed
+    if len(image_np.shape) == 3:
+        gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = image_np
+    
+    # Calculate brightness
+    brightness = np.mean(gray)
+    
+    # Calculate contrast
+    contrast = np.std(gray)
+    
+    # Calculate sharpness using Laplacian variance
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    sharpness = np.var(laplacian)
+    
+    # Define thresholds
+    BRIGHTNESS_THRESHOLD = 40
+    CONTRAST_THRESHOLD = 20
+    SHARPNESS_THRESHOLD = 100
+    
+    if brightness < BRIGHTNESS_THRESHOLD:
+        return False, "Image is too dark"
+    if contrast < CONTRAST_THRESHOLD:
+        return False, "Image has low contrast"
+    if sharpness < SHARPNESS_THRESHOLD:
+        return False, "Image is not sharp enough"
+    
+    return True, "Image quality is good"
+
 if __name__ == '__main__':
+    # Create temp directory
+    temp_dir = 'temp'
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        print(f"Created temp directory: {temp_dir}")
+
     # Initialize models
     initialize_models()
     
     # Get port from environment variable or use default
     port = int(os.environ.get('PORT', 10000))
     
-    # Start the server with worker configuration
+    # Start the server with optimized configuration
     print(f"Starting server on port {port}...")
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=port,
-        workers=1,  # Use single worker to reduce memory usage
-        limit_concurrency=1  # Limit concurrent requests
+        workers=1,  # Single worker
+        limit_concurrency=1,  # Limit concurrent requests
+        timeout_keep_alive=30  # Shorter keep-alive timeout
     )
