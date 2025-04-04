@@ -9,6 +9,15 @@ tf.config.set_visible_devices([], 'GPU')  # Ensure GPU is disabled
 tf.config.threading.set_inter_op_parallelism_threads(1)  # Limit thread usage
 tf.config.threading.set_intra_op_parallelism_threads(1)
 
+# Set memory growth for TensorFlow
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from deepface import DeepFace
@@ -23,7 +32,6 @@ from io import BytesIO
 from PIL import Image
 import io
 import time
-import uvicorn
 import gc  # Garbage collection
 import psutil  # Process and system utilities
 import threading
@@ -451,19 +459,9 @@ if __name__ == '__main__':
     else:
         print("Warning: Models failed to initialize before server start")
     
-    # Get port from environment variable or use default
-    port = int(os.environ.get('PORT', 10000))
+    # Get port from environment variable
+    port = int(os.environ.get('PORT', 5000))
     
-    # Start the server with optimized configuration
+    # Start the server
     print(f"Starting server on port {port}...")
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        workers=1,  # Single worker
-        limit_concurrency=1,  # Limit concurrent requests
-        timeout_keep_alive=30,  # Shorter keep-alive timeout
-        timeout_graceful_shutdown=30,  # Graceful shutdown timeout
-        limit_max_requests=100,  # Restart worker after 100 requests
-        log_level="info"
-    )
+    app.run(host='0.0.0.0', port=port)

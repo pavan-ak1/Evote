@@ -28,7 +28,7 @@ services:
     name: voter-verify-face
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn face_verification_server:app
+    startCommand: gunicorn -c gunicorn_config.py face_verification_server:app
     envVars:
       - key: PORT
         value: 5000
