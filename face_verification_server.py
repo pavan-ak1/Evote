@@ -2,6 +2,10 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
 
+# Import TensorFlow before other imports
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')  # Ensure GPU is disabled
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from deepface import DeepFace
