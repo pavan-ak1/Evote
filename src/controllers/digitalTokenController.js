@@ -110,31 +110,36 @@ exports.downloadDigitalTokenPDF = async (req, res) => {
     const qrCodeUrl = digitalToken.qrCode;
     
     // Create PDF document
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50,
+      bufferPages: true,
+      autoFirstPage: true
+    });
+    
     const bufferStream = new StreamBuffers.WritableStreamBuffer({
       initialSize: 100 * 1024,
       incrementAmount: 10 * 1024
     });
     doc.pipe(bufferStream);
 
-    // Add header
-    doc.fontSize(20).text("Digital Voting Token", { align: "center" });
-    doc.moveDown();
-
-    // Add voter details
-    doc.fontSize(14).text(`Voter ID: ${voterId}`);
-    doc.text(`Name: ${user.name}`);
-    doc.text(`Phone Number: ${user.phoneNumber || 'N/A'}`);
-    doc.text(`Slot Date: ${bookedSlot.date}`);
-    doc.text(`Slot Time: ${bookedSlot.startTime} - ${bookedSlot.endTime}`);
-    doc.moveDown();
-
-    // Add QR code
+    // Add QR code (larger size)
     const base64Data = qrCodeUrl.replace(/^data:image\/png;base64,/, "");
     const qrImageBuffer = Buffer.from(base64Data, "base64");
-    doc.image(qrImageBuffer, { align: "center", fit: [150, 150] });
-    
-    doc.fontSize(12).text("This QR code contains your voting token. Present this at the polling station.", { align: "center" });
+    doc.image(qrImageBuffer, { 
+      align: "center", 
+      fit: [300, 300],
+      y: 50
+    });
+
+    // Add voter details below QR code
+    doc.moveDown(2);
+    doc.fontSize(14);
+    doc.text(`Voter ID: ${voterId}`, { align: "center" });
+    doc.text(`Name: ${user.name}`, { align: "center" });
+    doc.text(`Phone Number: ${user.phoneNumber || 'N/A'}`, { align: "center" });
+    doc.text(`Slot Date: ${bookedSlot.date}`, { align: "center" });
+    doc.text(`Slot Time: ${bookedSlot.startTime} - ${bookedSlot.endTime}`, { align: "center" });
     
     doc.end();
 

@@ -111,10 +111,17 @@
       const originalText = registerButton.textContent;
       const messageDiv = document.getElementById('status');
       
-      // Get the token from localStorage
+      // Get the token and user ID from localStorage
       const token = localStorage.getItem('token');
+      const userId = localStorage.getItem('userId');
+      
       if (!token) {
         showStatus('Authentication token not found. Please log in again.', 'error');
+        return;
+      }
+
+      if (!userId) {
+        showStatus('User ID not found. Please log in again.', 'error');
         return;
       }
 
@@ -148,6 +155,7 @@
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
+            userId: userId,
             faceImage: imageData
           })
         });
