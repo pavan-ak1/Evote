@@ -2,7 +2,7 @@ services:
   - type: web
     name: voter-verify-backend
     runtime: node
-    buildCommand: npm install
+    buildCommand: npm install --production
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
@@ -27,11 +27,17 @@ services:
   - type: web
     name: voter-verify-face
     runtime: python
-    buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: |
-      export DEEPFACE_HOME=/opt/render/project/src/deepface_weights
-      export PYTHONUNBUFFERED=1
-      gunicorn -c gunicorn_config.py face_verification_server:app
+    buildCommand: |
+      pip install --no-cache-dir -r requirements.txt
+      mkdir -p deepface_weights/.deepface/weights
+      cp facenet_keras.h5 deepface_weights/.deepface/weights/
+      find /usr/local/lib/python* -type d -name "tests" -exec rm -rf {} +
+      find /usr/local/lib/python* -type d -name "__pycache__" -exec rm -rf {} +
+      find /usr/local/lib/python* -type f -name "*.pyc" -delete
+      find /usr/local/lib/python* -type f -name "*.pyo" -delete
+      find /usr/local/lib/python* -type f -name "*.pyd" -delete
+      rm -rf /root/.cache/pip
+    startCommand: gunicorn --bind 0.0.0.0:5001 face_verification_server:app
     envVars:
       - key: PORT
         value: 5001
