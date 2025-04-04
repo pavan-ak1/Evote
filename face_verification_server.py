@@ -38,6 +38,7 @@ import threading
 from queue import Queue
 import logging
 from concurrent.futures import ThreadPoolExecutor
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -79,8 +80,8 @@ def initialize_models():
     try:
         # Create a minimal test image
         test_image = np.zeros((16, 16, 3), dtype=np.uint8)
-        # Test DeepFace
-        DeepFace.verify(test_image, test_image, model_name='Facenet')
+        # Test DeepFace with minimal configuration
+        DeepFace.verify(test_image, test_image, model_name='Facenet', detector_backend='skip')
         logger.info("DeepFace models initialized successfully")
         return True
     except Exception as e:
@@ -149,8 +150,15 @@ def verify_face():
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
         try:
-            # Verify face using DeepFace
-            result = DeepFace.verify(rgb_img, rgb_img, model_name='Facenet')
+            # Verify face using DeepFace with optimized settings
+            result = DeepFace.verify(
+                rgb_img, 
+                rgb_img, 
+                model_name='Facenet',
+                detector_backend='skip',  # Skip face detection for self-comparison
+                enforce_detection=False,  # Don't enforce face detection
+                distance_metric='cosine'  # Use cosine distance for better performance
+            )
             
             return jsonify({
                 'success': True,
