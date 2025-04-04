@@ -34,11 +34,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Set environment variables
-ENV PORT=5000
+ENV PORT=5001
 ENV PYTHONUNBUFFERED=1
 
 # Expose the port
-EXPOSE 5000
+EXPOSE 5001
 
 # Command to run the application
 CMD ["gunicorn", "-c", "gunicorn_config.py", "face_verification_server:app"] 

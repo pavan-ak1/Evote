@@ -10,7 +10,7 @@ mkdir -p deepface_weights/.deepface/weights
 mkdir -p temp
 
 # Set environment variables
-export PORT=${PORT:-5000}
+export PORT=${PORT:-5001}
 export DEEPFACE_HOME=$(pwd)/deepface_weights
 export PYTHONUNBUFFERED=1
 
