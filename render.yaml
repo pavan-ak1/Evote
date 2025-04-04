@@ -27,10 +27,7 @@ services:
   - type: web
     name: voter-verify-face
     runtime: python
-    buildCommand: |
-      pip install -r requirements.txt
-      mkdir -p deepface_weights/.deepface/weights
-      cp facenet_keras.h5 deepface_weights/.deepface/weights/
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: |
       export DEEPFACE_HOME=/opt/render/project/src/deepface_weights
       export PYTHONUNBUFFERED=1

@@ -5,29 +5,20 @@ set -e
 
 echo "Starting build process..."
 
-# Install system dependencies
-echo "Installing system dependencies..."
-apt-get update && apt-get install -y \
-    build-essential \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    python3-dev \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python dependencies
+echo "Installing Python dependencies..."
+pip install -r requirements.txt
 
 # Create necessary directories
 echo "Creating required directories..."
 mkdir -p deepface_weights/.deepface/weights
-mkdir -p temp
 
-# Install Python dependencies
-echo "Installing Python dependencies..."
-pip install --no-cache-dir -r requirements.txt
+# Copy model file
+echo "Copying model file..."
+if [ -f "facenet_keras.h5" ]; then
+    cp facenet_keras.h5 deepface_weights/.deepface/weights/
+else
+    echo "Warning: facenet_keras.h5 not found!"
+fi
 
-# Set proper permissions
-echo "Setting permissions..."
-chmod +x start.sh
-
-# Make sure the script exits with success
-echo "Build completed successfully"
-exit 0 
+echo "Build completed successfully" 
