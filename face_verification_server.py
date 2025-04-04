@@ -29,6 +29,12 @@ import psutil  # Process and system utilities
 import threading
 from queue import Queue
 
+# Create temp directory
+temp_dir = os.path.join(os.getcwd(), 'temp')
+if not os.path.exists(temp_dir):
+    os.makedirs(temp_dir)
+    print(f"Created temp directory: {temp_dir}")
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -439,12 +445,6 @@ def check_face_quality(image):
     return True, "Image quality is good"
 
 if __name__ == '__main__':
-    # Create temp directory
-    temp_dir = 'temp'
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir)
-        print(f"Created temp directory: {temp_dir}")
-
     # Initialize models before starting server
     print("Starting model initialization...")
     if initialize_models():
