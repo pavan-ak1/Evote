@@ -435,7 +435,15 @@ if __name__ == '__main__':
     try:
         port = int(os.environ.get('PORT', 5000))
         logger.info(f"Starting server on port {port}...")
-        app.run(host='0.0.0.0', port=port, debug=False)
+        
+        # Force the server to bind to all interfaces
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            debug=False,
+            threaded=True,
+            use_reloader=False
+        )
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         logger.error(f"PORT environment variable: {os.environ.get('PORT')}")

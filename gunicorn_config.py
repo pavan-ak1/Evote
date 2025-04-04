@@ -1,16 +1,37 @@
 import os
 import multiprocessing
 import logging
+import socket
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('0.0.0.0', port))
+            return False
+        except socket.error:
+            return True
 
 # Get port from environment variable with validation
 try:
     port = int(os.environ.get('PORT', '5000'))
     if port < 1 or port > 65535:
         raise ValueError(f"Invalid port number: {port}")
+    
+    # Check if port is available
+    if is_port_in_use(port):
+        logger.warning(f"Port {port} is already in use. Trying to find an available port...")
+        for p in range(port, port + 10):
+            if not is_port_in_use(p):
+                port = p
+                logger.info(f"Found available port: {port}")
+                break
+        else:
+            raise RuntimeError("Could not find an available port")
+    
     logger.info(f"Using port: {port}")
 except Exception as e:
     logger.error(f"Error with PORT environment variable: {str(e)}")
