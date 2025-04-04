@@ -66,6 +66,7 @@ executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 # Set DeepFace model directory to a writable location
 DEEPFACE_DIR = os.path.join(os.getcwd(), 'deepface_weights')
 os.makedirs(DEEPFACE_DIR, exist_ok=True)
+os.makedirs(os.path.join(DEEPFACE_DIR, '.deepface', 'weights'), exist_ok=True)
 os.environ['DEEPFACE_HOME'] = DEEPFACE_DIR
 logger.info(f"DeepFace directory set to: {DEEPFACE_DIR}")
 
@@ -86,12 +87,24 @@ def initialize_models():
     try:
         # Create a minimal test image
         test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+        
+        # Ensure directories exist
+        weights_dir = os.path.join(DEEPFACE_DIR, '.deepface', 'weights')
+        os.makedirs(weights_dir, exist_ok=True)
+        
         # Test DeepFace with minimal configuration
-        DeepFace.verify(test_image, test_image, model_name='Facenet', detector_backend='skip')
+        result = DeepFace.verify(test_image, test_image, 
+                               model_name='Facenet',
+                               detector_backend='skip',
+                               enforce_detection=False)
+        
         logger.info("DeepFace models initialized successfully")
         return True
     except Exception as e:
         logger.error(f"Error initializing DeepFace models: {str(e)}")
+        logger.error(f"Current working directory: {os.getcwd()}")
+        logger.error(f"DeepFace directory: {DEEPFACE_DIR}")
+        logger.error(f"Weights directory: {os.path.join(DEEPFACE_DIR, '.deepface', 'weights')}")
         return False
 
 def process_request(func):

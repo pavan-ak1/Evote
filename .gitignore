@@ -20,6 +20,15 @@ ENV/
 face_recognition_env_py310_new/
 face_verification_server/
 
+# DeepFace and Model files
+deepface_weights/
+*.h5
+*.hdf5
+*.pkl
+*.model
+*.weights
+.deepface/
+
 # Logs
 logs
 *.log
