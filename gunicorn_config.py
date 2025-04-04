@@ -6,9 +6,16 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get port from environment variable
-port = os.environ.get('PORT', '5000')
-logger.info(f"Using port: {port}")
+# Get port from environment variable with validation
+try:
+    port = int(os.environ.get('PORT', '5000'))
+    if port < 1 or port > 65535:
+        raise ValueError(f"Invalid port number: {port}")
+    logger.info(f"Using port: {port}")
+except Exception as e:
+    logger.error(f"Error with PORT environment variable: {str(e)}")
+    port = 5000  # Fallback to default port
+    logger.info(f"Falling back to default port: {port}")
 
 # Number of workers
 workers = 1  # Single worker to minimize memory usage
@@ -45,9 +52,14 @@ accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 
-# Bind address
-bind = f"0.0.0.0:{port}"
-logger.info(f"Binding to: {bind}")
+# Bind address with validation
+try:
+    bind = f"0.0.0.0:{port}"
+    logger.info(f"Binding to: {bind}")
+except Exception as e:
+    logger.error(f"Error setting bind address: {str(e)}")
+    bind = "0.0.0.0:5000"  # Fallback to default
+    logger.info(f"Falling back to default bind address: {bind}")
 
 # Worker class settings
 worker_connections = 50  # Reduced connections to minimize memory usage

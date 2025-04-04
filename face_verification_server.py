@@ -431,9 +431,12 @@ if not initialize_models():
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
-    # Get port from environment variable
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Start the server
-    logger.info(f"Starting server on port {port}...")
-    app.run(host='0.0.0.0', port=port)
+    # Get port from environment variable with better error handling
+    try:
+        port = int(os.environ.get('PORT', 5000))
+        logger.info(f"Starting server on port {port}...")
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        logger.error(f"PORT environment variable: {os.environ.get('PORT')}")
+        raise
