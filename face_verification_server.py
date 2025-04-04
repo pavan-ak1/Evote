@@ -20,7 +20,7 @@ if gpus:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from deepface import DeepFace
+import face_recognition
 import numpy as np
 import base64
 import cv2
@@ -60,38 +60,21 @@ BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 request_queue = Queue(maxsize=1)  # Limit concurrent requests
 models_initialized = False
 model_lock = threading.Lock()
-model = None
 executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 
 def manage_memory():
-    """Aggressive memory management"""
-    gc.collect()  # Run garbage collection
-    process = psutil.Process()
-    memory_info = process.memory_info()
-    current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
-    
-    if current_memory > 100:  # Further reduced threshold to 100MB
-        logger.warning(f"High memory usage detected: {current_memory:.2f}MB")
-        gc.collect()  # Force garbage collection
-        tf.keras.backend.clear_session()  # Clear TensorFlow session
-        # Clear any cached models
-        global model
-        if model is not None:
-            del model
-            model = None
-        gc.collect()
-        # Force garbage collection again
-        gc.collect()
+    """Basic memory management"""
+    gc.collect()
 
 def initialize_models():
     """Initialize models with memory optimization"""
-    global models_initialized, model
+    global models_initialized
     with model_lock:
         if models_initialized:
             return True
             
         try:
-            logger.info("Initializing DeepFace models...")
+            logger.info("Initializing face recognition models...")
             manage_memory()
             
             # Create a minimal test image
@@ -99,8 +82,8 @@ def initialize_models():
             test_image_path = os.path.join(temp_dir, 'test_init.jpg')
             cv2.imwrite(test_image_path, test_image)
             
-            # Use a lighter model (Facenet instead of VGG-Face)
-            model = DeepFace.build_model('Facenet')
+            # Test with minimal configuration
+            face_recognition.face_encodings(test_image)
             
             # Clean up immediately
             if os.path.exists(test_image_path):
@@ -108,11 +91,11 @@ def initialize_models():
             
             # Set models_initialized before returning
             models_initialized = True
-            logger.info("DeepFace models initialized successfully")
+            logger.info("Face recognition models initialized successfully")
             manage_memory()
             return True
         except Exception as e:
-            logger.error(f"Error initializing DeepFace models: {str(e)}")
+            logger.error(f"Error initializing face recognition models: {str(e)}")
             models_initialized = False
             manage_memory()
             return False
@@ -151,39 +134,21 @@ def process_request(func):
     wrapped.__name__ = func.__name__  # Preserve the original function name
     return wrapped
 
-@app.route('/', methods=['GET', 'HEAD'])
+@app.route('/', methods=['GET'])
 def health_check():
-    try:
-        # Initialize models if not already initialized
-        if not models_initialized:
-            initialize_models()
-            
-        if request.method == 'HEAD':
-            return '', 200 if models_initialized else 503
-            
-        return jsonify({
-            'status': 'healthy' if models_initialized else 'unhealthy',
-            'initialized': models_initialized,
-            'timestamp': time.time(),
-            'message': 'Service is running' if models_initialized else 'Service is initializing'
-        }), 200 if models_initialized else 503
-    except Exception as e:
-        logger.error(f"Health check error: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'error': str(e),
-            'timestamp': time.time()
-        }), 503
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Service is running'
+    }), 200
 
 @app.route('/verify', methods=['POST'])
-@process_request
 def verify_face():
     try:
         data = request.get_json()
-        if not data or 'userId' not in data or 'faceImage' not in data:
+        if not data or 'faceImage' not in data:
             return jsonify({
                 'success': False,
-                'message': 'Missing required fields: userId and faceImage'
+                'message': 'Missing required field: faceImage'
             }), 400
 
         # Process image in memory
@@ -191,21 +156,37 @@ def verify_face():
         nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Verify face with lighter model
-        result = DeepFace.verify(
-            img1_path=img,
-            img2_path=img,
-            model_name='Facenet',  # Use lighter model
-            detector_backend='opencv',
-            enforce_detection=True,
-            model=model  # Use the pre-loaded model
-        )
-
+        # Convert BGR to RGB
+        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # Get face encodings
+        face_encodings = face_recognition.face_encodings(rgb_img)
+        
+        if not face_encodings:
+            return jsonify({
+                'success': False,
+                'message': 'No face detected in the image'
+            }), 400
+            
+        # Compare with itself (for testing)
+        face_encoding = face_encodings[0]
+        matches = face_recognition.compare_faces([face_encoding], face_encoding)
+        
+        # Calculate face distance
+        face_distances = face_recognition.face_distance([face_encoding], face_encoding)
+        distance = float(face_distances[0])
+        
+        # Define threshold (0.6 is a common threshold)
+        threshold = 0.6
+        
+        # Clean up memory
+        manage_memory()
+        
         return jsonify({
             'success': True,
-            'verified': result['verified'],
-            'distance': float(result['distance']),
-            'threshold': float(result['threshold'])
+            'verified': matches[0],
+            'distance': distance,
+            'threshold': threshold
         })
     except Exception as e:
         logger.error(f"Verification error: {str(e)}")
@@ -232,13 +213,7 @@ def register_face():
         
         # Verify face
         try:
-            DeepFace.verify(
-                img1_path=img,
-                img2_path=img,
-                model_name='VGG-Face',
-                detector_backend='opencv',
-                enforce_detection=True
-            )
+            face_recognition.face_encodings(img)
         except Exception as e:
             return jsonify({
                 'success': False,
@@ -304,28 +279,17 @@ def verify_voting():
             current_image = base64_to_image(data['image'])
             current_image.save('temp_current.jpg')
 
-            # Verify faces using DeepFace
-            result = DeepFace.verify(
-                img1_path='temp_current.jpg',
-                img2_path='temp_registered.jpg',
-                model_name='VGG-Face',
-                detector_backend='opencv',
-                distance_metric='cosine',
-                enforce_detection=True,
-                align=True
-            )
-
-            # Clean up temporary files
-            os.remove('temp_registered.jpg')
-            os.remove('temp_current.jpg')
-
-            # Convert distance to similarity percentage (0-1)
-            similarity = 1 - result['distance']
+            # Verify faces using face_recognition
+            registered_face_encoding = face_recognition.face_encodings(np.array(Image.open('temp_registered.jpg')))[0]
+            current_face_encoding = face_recognition.face_encodings(np.array(current_image))[0]
+            face_distances = face_recognition.face_distance([registered_face_encoding], current_face_encoding)
+            distance = float(face_distances[0])
             
-            # Define threshold for face match (0.75 = 75%)
-            threshold = 0.75
+            # Define threshold for face match (0.6 = 60%)
+            threshold = 0.6
             
             # Calculate match percentage for display
+            similarity = 1 - distance
             match_percentage = min(100, max(0, (similarity - threshold) * 100 / (1 - threshold)))
             
             # Only proceed with Cloudinary upload if match is above threshold
