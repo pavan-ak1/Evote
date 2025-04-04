@@ -90,6 +90,7 @@ def initialize_models():
             if os.path.exists(test_image_path):
                 os.remove(test_image_path)
             
+            # Set models_initialized before returning
             models_initialized = True
             print("DeepFace models initialized successfully")
             manage_memory()
@@ -137,6 +138,10 @@ def process_request(func):
 @app.route('/', methods=['GET', 'HEAD'])
 def health_check():
     try:
+        # Initialize models if not already initialized
+        if not models_initialized:
+            initialize_models()
+            
         if request.method == 'HEAD':
             return '', 200 if models_initialized else 503
             
@@ -440,8 +445,12 @@ if __name__ == '__main__':
         os.makedirs(temp_dir)
         print(f"Created temp directory: {temp_dir}")
 
-    # Initialize models
-    initialize_models()
+    # Initialize models before starting server
+    print("Starting model initialization...")
+    if initialize_models():
+        print("Models initialized successfully before server start")
+    else:
+        print("Warning: Models failed to initialize before server start")
     
     # Get port from environment variable or use default
     port = int(os.environ.get('PORT', 10000))
