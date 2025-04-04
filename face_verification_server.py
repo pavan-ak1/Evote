@@ -37,6 +37,7 @@ import psutil  # Process and system utilities
 import threading
 from queue import Queue
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +61,7 @@ request_queue = Queue(maxsize=1)  # Limit concurrent requests
 models_initialized = False
 model_lock = threading.Lock()
 model = None
+executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 
 def manage_memory():
     """Aggressive memory management"""
@@ -68,7 +70,7 @@ def manage_memory():
     memory_info = process.memory_info()
     current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
     
-    if current_memory > 150:  # Further reduced threshold to 150MB
+    if current_memory > 100:  # Further reduced threshold to 100MB
         logger.warning(f"High memory usage detected: {current_memory:.2f}MB")
         gc.collect()  # Force garbage collection
         tf.keras.backend.clear_session()  # Clear TensorFlow session
@@ -97,8 +99,8 @@ def initialize_models():
             test_image_path = os.path.join(temp_dir, 'test_init.jpg')
             cv2.imwrite(test_image_path, test_image)
             
-            # Test with minimal configuration and reduced model size
-            model = DeepFace.build_model('VGG-Face')
+            # Use a lighter model (Facenet instead of VGG-Face)
+            model = DeepFace.build_model('Facenet')
             
             # Clean up immediately
             if os.path.exists(test_image_path):
@@ -129,10 +131,10 @@ def process_request(func):
                     'message': 'Service is initializing, please try again in a few seconds'
                 }), 503
             
-            # Process request
-            manage_memory()
-            result = func(*args, **kwargs)
-            manage_memory()
+            # Process request in thread pool
+            future = executor.submit(func, *args, **kwargs)
+            result = future.result(timeout=30)  # 30 second timeout
+            
             return result
         except Exception as e:
             logger.error(f"Request processing error: {str(e)}")
@@ -189,11 +191,11 @@ def verify_face():
         nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Verify face
+        # Verify face with lighter model
         result = DeepFace.verify(
             img1_path=img,
             img2_path=img,
-            model_name='VGG-Face',
+            model_name='Facenet',  # Use lighter model
             detector_backend='opencv',
             enforce_detection=True,
             model=model  # Use the pre-loaded model
