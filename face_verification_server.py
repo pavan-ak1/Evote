@@ -1,10 +1,13 @@
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'  # Prevent TensorFlow from allocating all GPU memory
 
 # Import TensorFlow before other imports
 import tensorflow as tf
 tf.config.set_visible_devices([], 'GPU')  # Ensure GPU is disabled
+tf.config.threading.set_inter_op_parallelism_threads(1)  # Limit thread usage
+tf.config.threading.set_intra_op_parallelism_threads(1)
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -21,6 +24,8 @@ from PIL import Image
 import io
 import time
 import uvicorn
+import gc  # Garbage collection
+import psutil  # Process and system utilities
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -32,11 +37,22 @@ BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 # Track initialization status globally
 models_initialized = False
 
-# Initialize DeepFace models
+# Memory management function
+def manage_memory():
+    gc.collect()  # Run garbage collection
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    if memory_info.rss > 400 * 1024 * 1024:  # If using more than 400MB
+        print(f"High memory usage detected: {memory_info.rss / 1024 / 1024:.2f}MB")
+        gc.collect()  # Force garbage collection
+        tf.keras.backend.clear_session()  # Clear TensorFlow session
+
+# Initialize models with memory optimization
 def initialize_models():
     global models_initialized
     try:
         print("Initializing DeepFace models...")
+        manage_memory()
         
         # Create a simple test image
         test_image = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -58,10 +74,12 @@ def initialize_models():
             
         print("DeepFace models initialized successfully")
         models_initialized = True
+        manage_memory()
         return True
     except Exception as e:
         print(f"Error initializing DeepFace models: {str(e)}")
         models_initialized = False
+        manage_memory()
         return False
 
 # Create temp directory
@@ -166,6 +184,7 @@ def health_check():
 @app.route('/verify', methods=['POST'])
 def verify_face():
     try:
+        manage_memory()
         data = request.get_json()
         print("Received verification request:", data.keys())
         
@@ -299,10 +318,13 @@ def verify_face():
             'success': False,
             'error': str(e)
         }), 500
+    finally:
+        manage_memory()
 
 @app.route('/register', methods=['POST'])
 def register_face():
     try:
+        manage_memory()
         data = request.get_json()
         print("Received registration request")
         
@@ -371,13 +393,8 @@ def register_face():
                 'success': False,
                 'message': f'Error in face registration: {str(e)}'
             }), 400
-
-    except Exception as e:
-        print(f"Registration error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Error registering face: {str(e)}'
-        }), 500
+    finally:
+        manage_memory()
 
 @app.route('/verify-voting', methods=['POST'])
 def verify_voting():
@@ -518,6 +535,12 @@ if __name__ == '__main__':
     # Get port from environment variable or use default
     port = int(os.environ.get('PORT', 10000))
     
-    # Start the server
+    # Start the server with worker configuration
     print(f"Starting server on port {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        workers=1,  # Use single worker to reduce memory usage
+        limit_concurrency=1  # Limit concurrent requests
+    )
