@@ -93,7 +93,7 @@ io.on('connection', (socket) => {
 
 // Function to start the server
 function startServer() {
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🔗 API available at http://localhost:${PORT}/api`);
     console.log(`📱 Frontend available at http://localhost:${PORT}`);

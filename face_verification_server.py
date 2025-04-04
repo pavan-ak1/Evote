@@ -463,7 +463,7 @@ if not initialize_models():
 if __name__ == '__main__':
     # Get port from environment variable with better error handling
     try:
-        port = int(os.environ.get('PORT', 5000))
+        port = int(os.environ.get('PORT', 5001))
         logger.info(f"Starting server on port {port}...")
         
         # Force the server to bind to all interfaces
