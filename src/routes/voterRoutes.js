@@ -11,6 +11,7 @@ const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
 const DigitalToken = require('../models/digitalTokenModel');
 const mongoose = require('mongoose');
+const cloudinary = require('cloudinary');
 
 // Ensure model is loaded only once
 if (!mongoose.models.DigitalToken) {
@@ -182,70 +183,60 @@ router.post('/verify-token', authMiddleware, async (req, res) => {
   }
 });
 
-// Register face
+// Face registration route
 router.post('/face/register', authMiddleware, async (req, res) => {
-    try {
-        const { userId, faceImage } = req.body;
-        
-        if (!userId || !faceImage) {
-            return res.status(400).json({ 
-                success: false, 
-                message: "User ID and face image are required" 
-            });
-        }
-
-        // Check if user exists
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        // Check if face is already registered
-        if (user.hasFaceRegistered) {
-            return res.status(400).json({
-                success: false,
-                message: "Face is already registered for this user"
-            });
-        }
-
-        console.log('Starting face registration for user:', userId);
-        
-        const result = await faceService.registerFace(userId, faceImage);
-        
-        if (!result.success) {
-            console.error('Face registration failed:', result.error);
-            return res.status(503).json({ 
-                success: false, 
-                message: "Face registration service is temporarily unavailable",
-                error: result.error,
-                details: "Please try again in a few minutes"
-            });
-        }
-
-        // Update user's face registration status
-        user.hasFaceRegistered = true;
-        user.faceImageUrl = result.faceImageUrl;
-        user.faceRegisteredAt = new Date();
-        await user.save();
-
-        console.log('Face registration successful for user:', userId);
-        res.json({ 
-            success: true, 
-            message: "Face registered successfully",
-            faceImageUrl: result.faceImageUrl
-        });
-    } catch (error) {
-        console.error('Face registration error:', error);
-        res.status(503).json({ 
-            success: false, 
-            message: "Face registration service is temporarily unavailable",
-            error: error.message,
-            details: "Please try again in a few minutes"
-        });
+  try {
+    const { userId, faceImage } = req.body;
+    
+    if (!userId || !faceImage) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'User ID and face image are required' 
+      });
     }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Upload face image to Cloudinary
+    try {
+      const uploadResponse = await cloudinary.uploader.upload(faceImage, {
+        folder: 'face-registration',
+        resource_type: 'auto'
+      });
+
+      // Update user with face registration details
+      user.faceImageUrl = uploadResponse.secure_url;
+      user.hasFaceRegistered = true;
+      user.faceRegisteredAt = new Date();
+      user.faceVerifiedAt = null; // Reset verification status
+      await user.save();
+
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Face registered successfully!',
+        faceImageUrl: uploadResponse.secure_url
+      });
+    } catch (uploadError) {
+      console.error('Error uploading face image:', uploadError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error uploading face image' 
+      });
+    }
+  } catch (error) {
+    console.error('Face registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error' 
+    });
+  }
 });
 
 // Verify face
