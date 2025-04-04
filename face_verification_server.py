@@ -148,6 +148,36 @@ def health_check():
         'message': 'Service is running'
     }), 200
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    try:
+        # Check if models are initialized
+        if not initialize_models():
+            return jsonify({
+                'status': 'error',
+                'message': 'Models not initialized'
+            }), 500
+
+        # Check memory usage
+        memory = psutil.virtual_memory()
+        memory_status = {
+            'total': memory.total,
+            'available': memory.available,
+            'percent': memory.percent
+        }
+
+        return jsonify({
+            'status': 'healthy',
+            'memory': memory_status,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @app.route('/verify', methods=['POST'])
 def verify_face():
     try:

@@ -1,9 +1,8 @@
 services:
   - type: web
     name: voter-verify-backend
-    runtime: node
-    buildCommand: npm install --production
-    startCommand: node server.js
+    dockerfilePath: ./Dockerfile.backend
+    runtime: docker
     envVars:
       - key: NODE_ENV
         value: production
@@ -26,18 +25,8 @@ services:
 
   - type: web
     name: voter-verify-face
-    runtime: python
-    buildCommand: |
-      pip install --no-cache-dir -r requirements.txt
-      mkdir -p deepface_weights/.deepface/weights
-      cp facenet_keras.h5 deepface_weights/.deepface/weights/
-      find /usr/local/lib/python* -type d -name "tests" -exec rm -rf {} +
-      find /usr/local/lib/python* -type d -name "__pycache__" -exec rm -rf {} +
-      find /usr/local/lib/python* -type f -name "*.pyc" -delete
-      find /usr/local/lib/python* -type f -name "*.pyo" -delete
-      find /usr/local/lib/python* -type f -name "*.pyd" -delete
-      rm -rf /root/.cache/pip
-    startCommand: gunicorn --bind 0.0.0.0:5001 face_verification_server:app
+    dockerfilePath: ./Dockerfile
+    runtime: docker
     envVars:
       - key: PORT
         value: 5001
@@ -46,6 +35,6 @@ services:
       - key: BACKEND_API_KEY
         sync: false
       - key: DEEPFACE_HOME
-        value: /opt/render/project/src/deepface_weights
+        value: /app/deepface_weights
       - key: PYTHONUNBUFFERED
         value: 1 

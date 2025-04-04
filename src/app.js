@@ -58,6 +58,36 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting',
 .then(() => {console.log('MongoDB connected in app.js')})
 .catch(err => console.error('MongoDB connection error:', err));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  try {
+    // Check MongoDB connection
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
+    // Get memory usage
+    const memoryUsage = process.memoryUsage();
+    const memoryStatus = {
+      rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+      external: Math.round(memoryUsage.external / 1024 / 1024) + 'MB'
+    };
+    
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: dbStatus,
+      memory: memoryStatus
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+});
+
 // Default route
 app.get('*', (req, res) => {
   res.sendFile(path.resolve(__dirname, '../public', 'index.html'));
