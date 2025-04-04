@@ -63,42 +63,29 @@ model_lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 
 def manage_memory():
-    """Basic memory management"""
+    """Aggressive memory management"""
     gc.collect()
+    gc.set_threshold(100, 5, 5)  # More aggressive garbage collection
+    
+    # Check memory usage
+    process = psutil.Process(os.getpid())
+    memory_usage = process.memory_info().rss / 1024 / 1024  # Convert to MB
+    if memory_usage > 200:  # If memory usage exceeds 200MB
+        logger.warning(f"High memory usage detected: {memory_usage:.2f}MB")
+        gc.collect()  # Force garbage collection
 
-def initialize_models():
-    """Initialize models with memory optimization"""
-    global models_initialized
-    with model_lock:
-        if models_initialized:
-            return True
-            
-        try:
-            logger.info("Initializing face recognition models...")
-            manage_memory()
-            
-            # Create a minimal test image
-            test_image = np.zeros((16, 16, 3), dtype=np.uint8)  # Further reduced size
-            test_image_path = os.path.join(temp_dir, 'test_init.jpg')
-            cv2.imwrite(test_image_path, test_image)
-            
-            # Test with minimal configuration
-            face_recognition.face_encodings(test_image)
-            
-            # Clean up immediately
-            if os.path.exists(test_image_path):
-                os.remove(test_image_path)
-            
-            # Set models_initialized before returning
-            models_initialized = True
-            logger.info("Face recognition models initialized successfully")
-            manage_memory()
-            return True
-        except Exception as e:
-            logger.error(f"Error initializing face recognition models: {str(e)}")
-            models_initialized = False
-            manage_memory()
-            return False
+def initialize_face_recognition():
+    """Initialize face recognition with a minimal test image"""
+    try:
+        # Create a minimal test image
+        test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+        # Test face recognition
+        face_recognition.face_encodings(test_image)
+        logger.info("Face recognition initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing face recognition: {str(e)}")
+        return False
 
 def process_request(func):
     """Decorator to handle request queuing and memory management"""
@@ -108,7 +95,7 @@ def process_request(func):
             request_queue.put(True, timeout=30)  # 30 second timeout
             
             # Initialize models if needed
-            if not models_initialized and not initialize_models():
+            if not models_initialized and not initialize_face_recognition():
                 return jsonify({
                     'success': False,
                     'message': 'Service is initializing, please try again in a few seconds'
@@ -144,6 +131,8 @@ def health_check():
 @app.route('/verify', methods=['POST'])
 def verify_face():
     try:
+        manage_memory()  # Check memory before processing
+        
         data = request.get_json()
         if not data or 'faceImage' not in data:
             return jsonify({
@@ -420,12 +409,10 @@ def check_face_quality(image):
     return True, "Image quality is good"
 
 if __name__ == '__main__':
-    # Initialize models before starting server
-    logger.info("Starting model initialization...")
-    if initialize_models():
-        logger.info("Models initialized successfully before server start")
-    else:
-        logger.warning("Warning: Models failed to initialize before server start")
+    # Initialize face recognition
+    if not initialize_face_recognition():
+        logger.error("Failed to initialize face recognition")
+        exit(1)
     
     # Get port from environment variable
     port = int(os.environ.get('PORT', 5000))
