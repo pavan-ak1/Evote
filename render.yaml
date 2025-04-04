@@ -27,8 +27,14 @@ services:
   - type: web
     name: voter-verify-face
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -c gunicorn_config.py face_verification_server:app
+    buildCommand: |
+      pip install -r requirements.txt
+      mkdir -p deepface_weights/.deepface/weights
+      cp facenet_keras.h5 deepface_weights/.deepface/weights/
+    startCommand: |
+      export DEEPFACE_HOME=/opt/render/project/src/deepface_weights
+      export PYTHONUNBUFFERED=1
+      gunicorn -c gunicorn_config.py face_verification_server:app
     envVars:
       - key: PORT
         value: 5000
@@ -36,5 +42,7 @@ services:
         sync: false
       - key: BACKEND_API_KEY
         sync: false
-      - key: MODEL_PATH
-        value: /opt/render/project/src/facenet_keras.h5 
+      - key: DEEPFACE_HOME
+        value: /opt/render/project/src/deepface_weights
+      - key: PYTHONUNBUFFERED
+        value: 1 
