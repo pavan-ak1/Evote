@@ -54,7 +54,7 @@ def manage_memory():
     memory_info = process.memory_info()
     current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
     
-    if current_memory > 250:  # Reduced threshold to 250MB
+    if current_memory > 200:  # Reduced threshold to 200MB
         print(f"High memory usage detected: {current_memory:.2f}MB")
         gc.collect()  # Force garbage collection
         tf.keras.backend.clear_session()  # Clear TensorFlow session
@@ -77,7 +77,7 @@ def initialize_models():
             manage_memory()
             
             # Create a minimal test image
-            test_image = np.zeros((32, 32, 3), dtype=np.uint8)  # Further reduced size
+            test_image = np.zeros((16, 16, 3), dtype=np.uint8)  # Further reduced size
             test_image_path = os.path.join(temp_dir, 'test_init.jpg')
             cv2.imwrite(test_image_path, test_image)
             
@@ -462,5 +462,8 @@ if __name__ == '__main__':
         port=port,
         workers=1,  # Single worker
         limit_concurrency=1,  # Limit concurrent requests
-        timeout_keep_alive=30  # Shorter keep-alive timeout
+        timeout_keep_alive=30,  # Shorter keep-alive timeout
+        timeout_graceful_shutdown=30,  # Graceful shutdown timeout
+        limit_max_requests=100,  # Restart worker after 100 requests
+        log_level="info"
     )

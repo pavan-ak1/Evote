@@ -109,11 +109,12 @@
     async function captureAndRegister() {
       const registerButton = document.getElementById('capture-btn');
       const originalText = registerButton.textContent;
-      const userId = document.getElementById('userId').value;
       const messageDiv = document.getElementById('status');
       
-      if (!userId) {
-        showStatus('Please enter your user ID', 'error');
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        showStatus('Authentication token not found. Please log in again.', 'error');
         return;
       }
 
@@ -139,12 +140,6 @@
         const imageData = canvas.toDataURL('image/jpeg');
         console.log('Image captured, length:', imageData.length);
 
-        // Get the token from localStorage
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication token not found. Please log in again.');
-        }
-
         // Register the face
         const response = await fetch('https://voter-verify-backend.onrender.com/voter/face/register', {
           method: 'POST',
@@ -153,7 +148,6 @@
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            userId: userId,
             faceImage: imageData
           })
         });
