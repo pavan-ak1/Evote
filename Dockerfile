@@ -38,17 +38,17 @@ WORKDIR /app
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libopenblas-base \
+    libopenblas0 \
     liblapack3 \
     libjpeg62-turbo \
     libpng16-16 \
     libtiff6 \
-    libavcodec58 \
-    libavformat58 \
-    libswscale5 \
+    libavcodec59 \
+    libavformat59 \
+    libswscale6 \
     libv4l-0 \
     libxvidcore4 \
-    libx264-160 \
+    libx264-164 \
     libgtk-3-0 \
     libatlas3-base \
     curl \
