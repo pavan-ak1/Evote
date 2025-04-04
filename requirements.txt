@@ -2,13 +2,12 @@ flask==2.3.3
 werkzeug==2.3.7
 flask-cors==4.0.0
 deepface==0.0.79
-numpy>=1.23.0
+numpy==1.23.5
 opencv-python-headless==4.8.0.76
 requests==2.31.0
 python-dotenv==1.0.0
 Pillow==10.0.0
 gunicorn==21.2.0
-uvicorn==0.23.2
 tensorflow-cpu==2.13.0
 keras==2.13.1
 mtcnn==0.1.1

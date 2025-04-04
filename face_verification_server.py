@@ -36,12 +36,17 @@ import gc  # Garbage collection
 import psutil  # Process and system utilities
 import threading
 from queue import Queue
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create temp directory
 temp_dir = os.path.join(os.getcwd(), 'temp')
 if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
-    print(f"Created temp directory: {temp_dir}")
+    logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -54,6 +59,7 @@ BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 request_queue = Queue(maxsize=1)  # Limit concurrent requests
 models_initialized = False
 model_lock = threading.Lock()
+model = None
 
 def manage_memory():
     """Aggressive memory management"""
@@ -62,26 +68,28 @@ def manage_memory():
     memory_info = process.memory_info()
     current_memory = memory_info.rss / 1024 / 1024  # Convert to MB
     
-    if current_memory > 200:  # Reduced threshold to 200MB
-        print(f"High memory usage detected: {current_memory:.2f}MB")
+    if current_memory > 150:  # Further reduced threshold to 150MB
+        logger.warning(f"High memory usage detected: {current_memory:.2f}MB")
         gc.collect()  # Force garbage collection
         tf.keras.backend.clear_session()  # Clear TensorFlow session
         # Clear any cached models
-        if 'model' in globals():
-            del globals()['model']
+        global model
+        if model is not None:
+            del model
+            model = None
         gc.collect()
         # Force garbage collection again
         gc.collect()
 
 def initialize_models():
     """Initialize models with memory optimization"""
-    global models_initialized
+    global models_initialized, model
     with model_lock:
         if models_initialized:
             return True
             
         try:
-            print("Initializing DeepFace models...")
+            logger.info("Initializing DeepFace models...")
             manage_memory()
             
             # Create a minimal test image
@@ -90,14 +98,7 @@ def initialize_models():
             cv2.imwrite(test_image_path, test_image)
             
             # Test with minimal configuration and reduced model size
-            DeepFace.verify(
-                img1_path=test_image_path,
-                img2_path=test_image_path,
-                model_name='VGG-Face',
-                detector_backend='skip',  # Skip face detection for initialization
-                enforce_detection=False,
-                distance_metric='cosine'
-            )
+            model = DeepFace.build_model('VGG-Face')
             
             # Clean up immediately
             if os.path.exists(test_image_path):
@@ -105,11 +106,11 @@ def initialize_models():
             
             # Set models_initialized before returning
             models_initialized = True
-            print("DeepFace models initialized successfully")
+            logger.info("DeepFace models initialized successfully")
             manage_memory()
             return True
         except Exception as e:
-            print(f"Error initializing DeepFace models: {str(e)}")
+            logger.error(f"Error initializing DeepFace models: {str(e)}")
             models_initialized = False
             manage_memory()
             return False
@@ -134,7 +135,7 @@ def process_request(func):
             manage_memory()
             return result
         except Exception as e:
-            print(f"Request processing error: {str(e)}")
+            logger.error(f"Request processing error: {str(e)}")
             return jsonify({
                 'success': False,
                 'message': str(e)
@@ -165,7 +166,7 @@ def health_check():
             'message': 'Service is running' if models_initialized else 'Service is initializing'
         }), 200 if models_initialized else 503
     except Exception as e:
-        print(f"Health check error: {str(e)}")
+        logger.error(f"Health check error: {str(e)}")
         return jsonify({
             'status': 'error',
             'error': str(e),
@@ -194,7 +195,8 @@ def verify_face():
             img2_path=img,
             model_name='VGG-Face',
             detector_backend='opencv',
-            enforce_detection=True
+            enforce_detection=True,
+            model=model  # Use the pre-loaded model
         )
 
         return jsonify({
@@ -204,7 +206,7 @@ def verify_face():
             'threshold': float(result['threshold'])
         })
     except Exception as e:
-        print(f"Verification error: {str(e)}")
+        logger.error(f"Verification error: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'Error verifying face: {str(e)}'
@@ -453,15 +455,15 @@ def check_face_quality(image):
 
 if __name__ == '__main__':
     # Initialize models before starting server
-    print("Starting model initialization...")
+    logger.info("Starting model initialization...")
     if initialize_models():
-        print("Models initialized successfully before server start")
+        logger.info("Models initialized successfully before server start")
     else:
-        print("Warning: Models failed to initialize before server start")
+        logger.warning("Warning: Models failed to initialize before server start")
     
     # Get port from environment variable
     port = int(os.environ.get('PORT', 5000))
     
     # Start the server
-    print(f"Starting server on port {port}...")
+    logger.info(f"Starting server on port {port}...")
     app.run(host='0.0.0.0', port=port)
