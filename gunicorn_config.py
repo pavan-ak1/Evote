@@ -36,8 +36,9 @@ accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 
-# Bind address - use the PORT environment variable or default to 5000
-bind = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
+# Bind address - explicitly use the PORT environment variable
+port = os.environ.get('PORT', '5000')
+bind = f"0.0.0.0:{port}"
 
 # Worker class settings
 worker_connections = 50  # Reduced connections to minimize memory usage

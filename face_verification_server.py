@@ -409,12 +409,13 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
+# Initialize models when the application starts
+if not initialize_models():
+    logger.error("Failed to initialize models")
+    exit(1)
+
+# Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
-    # Initialize models
-    if not initialize_models():
-        logger.error("Failed to initialize models")
-        exit(1)
-    
     # Get port from environment variable
     port = int(os.environ.get('PORT', 5000))
     
