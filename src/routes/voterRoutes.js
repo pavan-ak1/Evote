@@ -227,14 +227,16 @@ router.post('/face/register', authMiddleware, async (req, res) => {
       console.error('Error uploading face image:', uploadError);
       return res.status(500).json({ 
         success: false, 
-        message: 'Error uploading face image' 
+        message: 'Error uploading face image',
+        error: uploadError.message 
       });
     }
   } catch (error) {
     console.error('Face registration error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Server error' 
+      message: 'Server error',
+      error: error.message 
     });
   }
 });

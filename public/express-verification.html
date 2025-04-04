@@ -148,7 +148,7 @@
         console.log('Image captured, length:', imageData.length);
 
         // Register the face
-        const response = await fetch('/api/face/register', {
+        const response = await fetch('/voter/face/register', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
