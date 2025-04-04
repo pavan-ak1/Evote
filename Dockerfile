@@ -71,6 +71,12 @@ ENV PORT=5001
 ENV PYTHONUNBUFFERED=1
 ENV DEEPFACE_HOME=/app/deepface_weights
 
+# Create startup script
+RUN echo '#!/bin/bash\n\
+echo "Starting server on port $PORT..."\n\
+gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 face_verification_server:app\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
 # Expose the port
 EXPOSE 5001
 
@@ -78,5 +84,5 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
-# Command to run the application with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--timeout", "120", "face_verification_server:app"] 
+# Command to run the application
+CMD ["/app/start.sh"] 

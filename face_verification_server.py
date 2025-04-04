@@ -39,6 +39,7 @@ from queue import Queue
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -483,4 +484,5 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Failed to start server: {str(e)}")
         logger.error(f"PORT environment variable: {os.environ.get('PORT')}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise
