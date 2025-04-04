@@ -167,9 +167,17 @@
         }
 
         showStatus('Face registered successfully!', 'success');
-        // Redirect to verification page after successful registration
+        
+        // Verify token is still valid before redirecting
+        const currentToken = localStorage.getItem('token');
+        if (!currentToken) {
+          showStatus('Session expired. Please log in again.', 'error');
+          return;
+        }
+
+        // Redirect to dashboard after successful registration
         setTimeout(() => {
-          window.location.href = 'verification.html';
+          window.location.href = '/dashboard.html';
         }, 2000);
 
       } catch (error) {

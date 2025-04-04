@@ -106,49 +106,125 @@ exports.downloadDigitalTokenPDF = async (req, res) => {
       return res.status(404).json({ error: "Digital token not found. Please generate a token first." });
     }
     
-    // Use the QR code URL directly from the stored token
-    const qrCodeUrl = digitalToken.qrCode;
-    
-    // Create PDF document
+    // Create PDF document with proper settings
     const doc = new PDFDocument({
       size: 'A4',
       margin: 50,
       bufferPages: true,
-      autoFirstPage: true
+      autoFirstPage: true,
+      info: {
+        Title: 'Digital Voting Token',
+        Author: 'Election Commission of India'
+      }
     });
     
-    const bufferStream = new StreamBuffers.WritableStreamBuffer({
-      initialSize: 100 * 1024,
-      incrementAmount: 10 * 1024
-    });
-    doc.pipe(bufferStream);
-
-    // Add QR code (larger size)
-    const base64Data = qrCodeUrl.replace(/^data:image\/png;base64,/, "");
-    const qrImageBuffer = Buffer.from(base64Data, "base64");
-    doc.image(qrImageBuffer, { 
-      align: "center", 
-      fit: [300, 300],
-      y: 50
+    // Create a buffer to store the PDF
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    
+    // Create a promise to handle PDF generation
+    const pdfPromise = new Promise((resolve, reject) => {
+      doc.on('end', () => {
+        const result = Buffer.concat(chunks);
+        resolve(result);
+      });
+      doc.on('error', reject);
     });
 
-    // Add voter details below QR code
+    // Add header
+    doc.font('Helvetica-Bold')
+       .fontSize(24)
+       .text('Election Commission of India', { align: 'center' });
+    
+    doc.moveDown();
+    doc.fontSize(20)
+       .text('Digital Voting Token', { align: 'center' });
+    
     doc.moveDown(2);
-    doc.fontSize(14);
-    doc.text(`Voter ID: ${voterId}`, { align: "center" });
-    doc.text(`Name: ${user.name}`, { align: "center" });
-    doc.text(`Phone Number: ${user.phoneNumber || 'N/A'}`, { align: "center" });
-    doc.text(`Slot Date: ${bookedSlot.date}`, { align: "center" });
-    doc.text(`Slot Time: ${bookedSlot.startTime} - ${bookedSlot.endTime}`, { align: "center" });
-    
-    doc.end();
 
-    bufferStream.on("finish", () => {
-      const pdfData = bufferStream.getContents();
-      res.setHeader("Content-Disposition", `attachment; filename=digital_token_${user.name.replace(/\s+/g, '_')}.pdf`);
-      res.setHeader("Content-Type", "application/pdf");
-      res.send(pdfData);
-    });
+    // Add voter details
+    doc.font('Helvetica-Bold')
+       .fontSize(14)
+       .text('Voter Information:', { align: 'left' });
+    
+    doc.moveDown();
+    doc.font('Helvetica')
+       .fontSize(12)
+       .text(`Name: ${user.name}`, { align: 'left' })
+       .text(`Voter ID: ${user.voterId || voterId}`, { align: 'left' })
+       .text(`Phone Number: ${user.phoneNumber || 'N/A'}`, { align: 'left' })
+       .text(`Email: ${user.email || 'N/A'}`, { align: 'left' });
+    
+    doc.moveDown(2);
+
+    // Add time slot information
+    doc.font('Helvetica-Bold')
+       .fontSize(14)
+       .text('Voting Time Slot:', { align: 'left' });
+    
+    doc.moveDown();
+    doc.font('Helvetica')
+       .fontSize(12)
+       .text(`Date: ${bookedSlot.date}`, { align: 'left' })
+       .text(`Time: ${bookedSlot.startTime} - ${bookedSlot.endTime}`, { align: 'left' });
+    
+    doc.moveDown(2);
+
+    // Add QR code
+    try {
+      const qrCodeUrl = digitalToken.qrCode;
+      const base64Data = qrCodeUrl.replace(/^data:image\/png;base64,/, "");
+      const qrImageBuffer = Buffer.from(base64Data, "base64");
+      
+      doc.font('Helvetica-Bold')
+         .fontSize(14)
+         .text('QR Code:', { align: 'center' });
+      
+      doc.moveDown();
+      doc.image(qrImageBuffer, {
+        fit: [200, 200],
+        align: 'center'
+      });
+    } catch (error) {
+      console.error('Error adding QR code to PDF:', error);
+      throw new Error('Failed to add QR code to PDF');
+    }
+    
+    doc.moveDown(2);
+
+    // Add instructions
+    doc.font('Helvetica-Bold')
+       .fontSize(14)
+       .text('Instructions:', { align: 'left' });
+    
+    doc.moveDown();
+    doc.font('Helvetica')
+       .fontSize(10)
+       .text('1. Present this token at the polling booth', { align: 'left' })
+       .text('2. Show the QR code to the polling officer', { align: 'left' })
+       .text('3. Keep this token safe and do not share it', { align: 'left' })
+       .text('4. This token is valid only for the specified time slot', { align: 'left' });
+    
+    // Add footer
+    doc.moveDown(4);
+    doc.font('Helvetica')
+       .fontSize(8)
+       .text('Generated on: ' + new Date().toLocaleString(), { align: 'center' })
+       .text('© Election Commission of India', { align: 'center' });
+    
+    // Finalize PDF
+    doc.end();
+    
+    // Wait for PDF to be generated
+    const pdfBuffer = await pdfPromise;
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=digital_token_${user.name.replace(/\s+/g, '_')}.pdf`);
+    
+    // Send the PDF
+    res.send(pdfBuffer);
+    
   } catch (error) {
     console.error("Error generating digital token PDF:", error);
     res.status(500).json({ error: error.message });

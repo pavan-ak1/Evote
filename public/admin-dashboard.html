@@ -988,6 +988,7 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                         },
                         body: JSON.stringify({
                             image1: capturedImage,
+                            image2: registeredFaceImage,
                             userId: voterId
                         })
                     });
@@ -1007,48 +1008,12 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                                 const matchProgressElement = document.getElementById('matchProgress');
                                 const verificationActions = document.getElementById('verificationActions');
                                 
-                                if (matchPercentageElement && matchProgressElement) {
-                                    matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                                if (matchPercentageElement) matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                                if (matchProgressElement) {
                                     matchProgressElement.style.width = `${verificationData.matchPercentage}%`;
                                     matchProgressElement.setAttribute('aria-valuenow', verificationData.matchPercentage);
-                                    
-                                    // Update progress bar color based on match percentage
-                                    if (verificationData.matchPercentage >= 75) {
-                                        matchProgressElement.className = 'progress-bar bg-success';
-                                    } else if (verificationData.matchPercentage >= 60) {
-                                        matchProgressElement.className = 'progress-bar bg-warning';
-                                    } else {
-                                        matchProgressElement.className = 'progress-bar bg-danger';
-                                    }
                                 }
-
-                                // Show continue to voting button
-                                if (verificationActions) {
-                                    verificationActions.style.display = 'block';
-                                }
-                                
-                                // Update voter status
-                                try {
-                                    const updateResponse = await fetch(`/api/admin/voters/${voterId}/status`, {
-                                        method: 'PUT',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${token}`
-                                        },
-                                        body: JSON.stringify({
-                                            faceVerifiedAt: new Date().toISOString()
-                                        })
-                                    });
-
-                                    if (!updateResponse.ok) {
-                                        throw new Error('Failed to update voter status');
-                                    }
-
-                                    const updateData = await updateResponse.json();
-                                    console.log('Voter status updated:', updateData);
-                                } catch (updateError) {
-                                    console.error('Error updating voter status:', updateError);
-                                }
+                                if (verificationActions) verificationActions.style.display = 'block';
                             } else {
                                 faceVerificationStatus.textContent = `Face verification failed. Match percentage: ${verificationData.matchPercentage.toFixed(2)}%`;
                                 faceVerificationStatus.className = 'alert alert-danger';
@@ -1090,52 +1055,16 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                         const matchProgressElement = document.getElementById('matchProgress');
                         const verificationActions = document.getElementById('verificationActions');
                         
-                        if (matchPercentageElement && matchProgressElement) {
-                            matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                        if (matchPercentageElement) matchPercentageElement.textContent = verificationData.matchPercentage.toFixed(2);
+                        if (matchProgressElement) {
                             matchProgressElement.style.width = `${verificationData.matchPercentage}%`;
                             matchProgressElement.setAttribute('aria-valuenow', verificationData.matchPercentage);
-                            
-                            // Update progress bar color based on match percentage
-                            if (verificationData.matchPercentage >= 75) {
-                                matchProgressElement.className = 'progress-bar bg-success';
-                            } else if (verificationData.matchPercentage >= 60) {
-                                matchProgressElement.className = 'progress-bar bg-warning';
-                            } else {
-                                matchProgressElement.className = 'progress-bar bg-danger';
-                            }
                         }
-
-                        // Show continue to voting button
-                        if (verificationActions) {
-                            verificationActions.style.display = 'block';
-                        }
-                        
-                        // Update voter status
-                        try {
-                            const updateResponse = await fetch(`/api/admin/voters/${voterId}/status`, {
-                                method: 'PUT',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                    faceVerifiedAt: new Date().toISOString()
-                                })
-                            });
-
-                            if (!updateResponse.ok) {
-                                throw new Error('Failed to update voter status');
-                            }
-
-                            const updateData = await updateResponse.json();
-                            console.log('Voter status updated:', updateData);
-                        } catch (updateError) {
-                            console.error('Error updating voter status:', updateError);
-                        }
+                        if (verificationActions) verificationActions.style.display = 'block';
                     }
                 } catch (error) {
                     console.error('Face verification error:', error);
-                    faceVerificationStatus.textContent = `Error: ${error.message}`;
+                    faceVerificationStatus.textContent = error.message || 'Error verifying face';
                     faceVerificationStatus.className = 'alert alert-danger';
                 }
             });

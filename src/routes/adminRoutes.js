@@ -241,12 +241,14 @@ router.post("/read-qr", authenticateAdmin, async (req, res) => {
 // Verify face 
 router.post("/verify-face", authenticateAdmin, async (req, res) => {
   try {
-    const { image1, userId } = req.body;
+    const { image1, image2, userId } = req.body;
     
-    if (!userId || !image1) {
+    if (!userId || !image1 || !image2) {
       return res.status(400).json({ 
         success: false,
-        error: "User ID and face image are required"
+        error: "User ID and both face images are required",
+        matchPercentage: 0,
+        isMatch: false
       });
     }
     
@@ -255,21 +257,14 @@ router.post("/verify-face", authenticateAdmin, async (req, res) => {
     if (!user) {
       return res.status(404).json({ 
         success: false,
-        error: "User not found"
-      });
-    }
-    
-    // Get the registered face image
-    const registeredFaceImage = user.faceImageUrl;
-    if (!registeredFaceImage) {
-      return res.status(400).json({ 
-        success: false,
-        error: "User has not registered a face image"
+        error: "User not found",
+        matchPercentage: 0,
+        isMatch: false
       });
     }
     
     // Verify the face
-    const verificationResult = await faceService.verifyFace(image1, registeredFaceImage);
+    const verificationResult = await faceService.verifyFace(image1, image2);
     
     if (!verificationResult.success) {
       return res.status(500).json({
@@ -301,6 +296,8 @@ router.post("/verify-face", authenticateAdmin, async (req, res) => {
     return res.status(500).json({ 
       success: false,
       error: error.message || "Face verification service error",
+      matchPercentage: 0,
+      isMatch: false,
       details: error.message
     });
   }
