@@ -88,8 +88,7 @@ def initialize_models():
                 model_name='VGG-Face',
                 detector_backend='skip',  # Skip face detection for initialization
                 enforce_detection=False,
-                distance_metric='cosine',
-                model=None  # Don't load model weights yet
+                distance_metric='cosine'
             )
             
             # Clean up immediately
