@@ -16,9 +16,9 @@ document.addEventListener("DOMContentLoaded", () => {
   
         if (response.ok) {
           localStorage.setItem("token", result.token);
-          localStorage.setItem("userId", result.user.id);
-          localStorage.setItem("voterId", result.user ? result.user.voterId : result.voterId);
-          localStorage.setItem("phoneNumber", result.user ? result.user.phoneNumber : result.phoneNumber);
+          localStorage.setItem("userId", result.userId);
+          localStorage.setItem("voterId", result.voterId);
+          localStorage.setItem("phoneNumber", result.phoneNumber);
           localStorage.setItem("isAdmin", result.isAdmin ? "true" : "false");
           window.location.href = "/dashboard.html";
         } else {
