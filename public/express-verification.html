@@ -190,7 +190,10 @@
         const response = await fetch('/voter/face/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ image: imageData })
+          body: JSON.stringify({ 
+            image: imageData,
+            userId: userId 
+          })
         });
 
         const data = await response.json();
