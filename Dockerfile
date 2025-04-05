@@ -30,7 +30,7 @@ COPY requirements.txt .
 # Install Python dependencies with specific versions
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-    tensorflow==2.15.0 \
+    tensorflow-cpu==2.15.0 \
     deepface==0.0.79 \
     opencv-python-headless==4.8.1.78 \
     numpy==1.24.3 \
@@ -83,18 +83,24 @@ ENV DEEPFACE_HOME=/app/deepface_weights
 ENV CUDA_VISIBLE_DEVICES=-1
 ENV TF_CPP_MIN_LOG_LEVEL=2
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV TF_NUM_INTEROP_THREADS=1
+ENV TF_NUM_INTRAOP_THREADS=1
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
 
 # Create startup script with optimized Gunicorn settings
 RUN echo '#!/bin/bash\n\
 echo "Starting server on port $PORT..."\n\
 gunicorn --bind 0.0.0.0:$PORT \
     --workers 1 \
-    --threads 4 \
+    --threads 2 \
     --timeout 120 \
-    --max-requests 1000 \
-    --max-requests-jitter 50 \
+    --max-requests 100 \
+    --max-requests-jitter 10 \
     --worker-class gthread \
     --log-level info \
+    --preload \
     face_verification_server:app\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 

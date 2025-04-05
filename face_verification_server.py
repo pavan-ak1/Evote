@@ -65,10 +65,10 @@ CORS(app, resources={
             "https://voter-verify-backend-ry3f.onrender.com"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
-        "max_age": 3600,
-        "expose_headers": ["Content-Type", "Authorization"]
+        "max_age": 3600
     }
 })
 
@@ -638,3 +638,22 @@ if __name__ == '__main__':
         threaded=True,
         use_reloader=False
     )
+
+# Add OPTIONS handler for preflight requests
+@app.route('/api/register', methods=['OPTIONS'])
+def handle_options():
+    response = jsonify({'status': 'ok'})
+    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+@app.route('/api/verify', methods=['OPTIONS'])
+def handle_verify_options():
+    response = jsonify({'status': 'ok'})
+    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
