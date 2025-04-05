@@ -37,7 +37,6 @@ exports.createTimeSlot = async (req, res) => {
 exports.getAvailableSlots = async (req, res) => {
   try {
     const { date } = req.query;
-    console.log("getAvailableSlots called with date =", date); // Debug log
     
     // If no date provided, return all slots
     let query = {};
@@ -49,11 +48,9 @@ exports.getAvailableSlots = async (req, res) => {
     
     // Find all slots matching the query
     const slots = await TimeSlot.find(query);
-    console.log("Slots found in DB:", slots); // Debug log
     
     // If no slots found, return empty array
     if (!slots || slots.length === 0) {
-      console.log("No slots found for date:", date);
       return res.json([]);
     }
     

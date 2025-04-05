@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
   <title>Face Registration</title>
   <link rel="stylesheet" href="css/output.css">
 </head>
@@ -126,38 +127,105 @@
       }
     }
     async function captureAndRegister() {
+      const registerButton = document.getElementById('capture-btn');
+      const originalText = registerButton.textContent;
+      const messageDiv = document.getElementById('status');
+      
+      // Get the token and user ID from localStorage
+      const token = localStorage.getItem('token');
+      const userId = localStorage.getItem('userId');
+      
+      if (!token) {
+        showStatus('Authentication token not found. Please log in again.', 'error');
+        return;
+      }
+
+      if (!userId) {
+        showStatus('User ID not found. Please log in again.', 'error');
+        return;
+      }
+
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          showStatus('Please log in first.', false);
-          return;
-        }
+        // Disable button and show loading state
+        registerButton.disabled = true;
+        registerButton.textContent = 'Processing...';
+        messageDiv.textContent = '';
+
+        // Get the captured image
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageBase64 = canvas.toDataURL('image/png');
-        showStatus('Processing your face image...', null);
-        const response = await fetch('/api/face/verify', {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw video frame on canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Get image data as base64
+        const imageData = canvas.toDataURL('image/jpeg');
+        console.log('Image captured, length:', imageData.length);
+
+        // Register the face
+        const response = await fetch('/voter/face/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ image: imageBase64 })
         });
+
         const data = await response.json();
-        if (response.ok && data.success) {
-          showStatus('Face registered successfully!', true);
-        } else {
-          showStatus(data.message || 'Error registering face', false);
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to register face');
         }
+
+        showStatus('Face registered successfully!', 'success');
+        
+        // Verify token is still valid before redirecting
+        const currentToken = localStorage.getItem('token');
+        if (!currentToken) {
+          showStatus('Session expired. Please log in again.', 'error');
+          return;
+        }
+
+        // Redirect to dashboard after successful registration
+        setTimeout(() => {
+          window.location.href = '/dashboard.html';
+        }, 2000);
+
       } catch (error) {
-        showStatus('An error occurred during face registration', false);
+        console.error('Registration error:', error);
+        showStatus(error.message || 'An error occurred during face registration. Please try again.', 'error');
+      } finally {
+        // Restore button state
+        registerButton.disabled = false;
+        registerButton.textContent = originalText;
       }
     }
-    function showStatus(message, isSuccess) {
+
+    function showStatus(message, type) {
       const statusElement = document.getElementById('status');
       statusElement.textContent = message;
-      statusElement.classList.remove('hidden', 'text-red-500', 'text-green-500');
-      statusElement.classList.add(isSuccess ? 'text-green-500' : 'text-red-500');
+      statusElement.style.display = 'block';
+      
+      // Clear any existing classes
+      statusElement.className = 'status';
+      
+      // Add appropriate class based on type
+      switch(type) {
+        case true:
+          statusElement.classList.add('success');
+          break;
+        case false:
+          statusElement.classList.add('error');
+          break;
+        case 'info':
+          statusElement.classList.add('info');
+          break;
+        default:
+          statusElement.classList.add('info');
+      }
     }
     document.getElementById('capture-btn').addEventListener('click', captureAndRegister);
   </script>

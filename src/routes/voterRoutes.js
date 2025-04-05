@@ -7,6 +7,16 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const FaceVerificationService = require('../services/faceVerificationService');
 const faceService = new FaceVerificationService();
+const QRCode = require('qrcode');
+const PDFDocument = require('pdfkit');
+const DigitalToken = require('../models/digitalTokenModel');
+const mongoose = require('mongoose');
+const cloudinary = require('cloudinary');
+
+// Ensure model is loaded only once
+if (!mongoose.models.DigitalToken) {
+    require('../models/digitalTokenModel');
+}
 
 // router.post("/verify-face", async (req, res) => {
 //     try {
@@ -173,42 +183,62 @@ router.post('/verify-token', authMiddleware, async (req, res) => {
   }
 });
 
-// Register face
+// Face registration route
 router.post('/face/register', authMiddleware, async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const { faceImage } = req.body;
-        if (!faceImage) {
-            return res.status(400).json({ message: 'Face image is required' });
-        }
-
-        // Register face with the face verification service
-        const result = await faceService.registerFace(user.id, faceImage);
-
-        // Update user record with face image and URL
-        user.faceImage = faceImage;
-        user.faceImageUrl = result.faceImageUrl;
-        user.hasFaceRegistered = true;
-        user.faceRegisteredAt = new Date();
-        await user.save();
-
-        res.json({ 
-            success: true,
-            message: 'Face registered successfully',
-            faceImageUrl: result.faceImageUrl
-        });
-    } catch (error) {
-        console.error('Face registration error:', error);
-        res.status(500).json({ 
-            success: false,
-            message: 'Error registering face',
-            error: error.message 
-        });
+  try {
+    const { userId, faceImage } = req.body;
+    
+    if (!userId || !faceImage) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'User ID and face image are required' 
+      });
     }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Upload face image to Cloudinary
+    try {
+      const uploadResponse = await cloudinary.uploader.upload(faceImage, {
+        folder: 'face-registration',
+        resource_type: 'auto'
+      });
+
+      // Update user with face registration details
+      user.faceImageUrl = uploadResponse.secure_url;
+      user.hasFaceRegistered = true;
+      user.faceRegisteredAt = new Date();
+      user.faceVerifiedAt = null; // Reset verification status
+      await user.save();
+
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Face registered successfully!',
+        faceImageUrl: uploadResponse.secure_url
+      });
+    } catch (uploadError) {
+      console.error('Error uploading face image:', uploadError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error uploading face image',
+        error: uploadError.message 
+      });
+    }
+  } catch (error) {
+    console.error('Face registration error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: error.message 
+    });
+  }
 });
 
 // Verify face
@@ -306,6 +336,168 @@ router.get('/face/health', async (req, res) => {
             error: error.message 
         });
     }
+});
+
+router.post("/generate-token", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).populate('timeSlot');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found" 
+      });
+    }
+    
+    if (!user.timeSlot) {
+      return res.status(400).json({ 
+        success: false,
+        error: "No time slot assigned" 
+      });
+    }
+    
+    // Check if face is registered
+    if (!user.hasFaceRegistered) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Face registration required before generating token" 
+      });
+    }
+    
+    // Check if token already exists
+    const existingToken = await DigitalToken.findOne({ voterId: userId });
+    if (existingToken) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Token already generated" 
+      });
+    }
+    
+    // Create token data
+    const tokenData = {
+      voterId: userId,
+      slotId: user.timeSlot._id,
+      name: user.name,
+      voterId: user.voterId || userId,
+      timeSlot: `${user.timeSlot.date} at ${user.timeSlot.startTime}`,
+      generatedAt: new Date().toISOString()
+    };
+    
+    // Generate QR code
+    const qrCode = await QRCode.toDataURL(JSON.stringify(tokenData), {
+      errorCorrectionLevel: 'H',
+      margin: 1,
+      width: 300,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+    
+    // Create PDF document with proper settings
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50,
+      bufferPages: true,
+      autoFirstPage: true,
+      info: {
+        Title: 'Digital Voting Token',
+        Author: 'Voter Verification System'
+      }
+    });
+    
+    // Create a buffer to store the PDF
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    
+    // Create a promise to handle PDF generation
+    const pdfPromise = new Promise((resolve, reject) => {
+      doc.on('end', () => {
+        const result = Buffer.concat(chunks);
+        resolve(result);
+      });
+      doc.on('error', reject);
+    });
+    
+    // Add content to PDF with proper encoding
+    doc.font('Helvetica-Bold')
+       .fontSize(20)
+       .text('Digital Voting Token', { align: 'center' });
+    
+    doc.moveDown(2);
+    
+    doc.font('Helvetica')
+       .fontSize(12)
+       .text(`Name: ${user.name}`, { align: 'left' })
+       .text(`Voter ID: ${user.voterId || userId}`, { align: 'left' })
+       .text(`Time Slot: ${user.timeSlot.date} at ${user.timeSlot.startTime}`, { align: 'left' })
+       .text(`Generated At: ${new Date().toLocaleString()}`, { align: 'left' });
+    
+    doc.moveDown(2);
+    
+    // Add QR code with proper error handling
+    try {
+      const qrBuffer = Buffer.from(qrCode.split(',')[1], 'base64');
+      doc.image(qrBuffer, {
+        fit: [200, 200],
+        align: 'center'
+      });
+    } catch (qrError) {
+      console.error('Error adding QR code to PDF:', qrError);
+      throw new Error('Failed to add QR code to PDF');
+    }
+    
+    doc.moveDown(2);
+    
+    // Add instructions
+    doc.font('Helvetica')
+       .fontSize(10)
+       .text('Instructions:', { align: 'left' })
+       .fontSize(9)
+       .text('1. Present this token at the polling booth', { align: 'left' })
+       .text('2. Show the QR code to the polling officer', { align: 'left' })
+       .text('3. Keep this token safe and do not share it', { align: 'left' });
+    
+    // Finalize PDF
+    doc.end();
+    
+    // Wait for PDF to be generated
+    const pdfBuffer = await pdfPromise;
+    
+    // Create digital token record with proper encoding
+    const digitalToken = new DigitalToken({
+      voterId: userId,
+      token: JSON.stringify(tokenData),
+      qrCode: qrCode,
+      pdfData: pdfBuffer.toString('base64'),
+      generatedAt: new Date(),
+      status: 'active'
+    });
+    
+    await digitalToken.save();
+    
+    // Send response with PDF data and proper headers
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      success: true,
+      message: "Digital token generated successfully",
+      token: {
+        id: digitalToken._id,
+        generatedAt: digitalToken.generatedAt,
+        pdfData: pdfBuffer.toString('base64'),
+        mimeType: 'application/pdf'
+      }
+    });
+    
+  } catch (error) {
+    console.error("Error generating digital token:", error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to generate digital token",
+      details: error.message 
+    });
+  }
 });
 
 module.exports = router;

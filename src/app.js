@@ -3,15 +3,30 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
+const cloudinary = require('cloudinary').v2;
 
 // Load environment variables
 dotenv.config();
 
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 // Create Express app
 const app = express();
 
+// CORS configuration
+app.use(cors({
+  origin: ['https://voter-verify-backend.onrender.com', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
 // Middleware
-app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -48,8 +63,38 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/evoting',
   connectTimeoutMS: 30000,
   socketTimeoutMS: 45000
 })
-.then(() => console.log('MongoDB connected in app.js'))
-.catch(err => console.error('MongoDB connection error in app.js:', err));
+.then(() => {console.log('MongoDB connected in app.js')})
+.catch(err => console.error('MongoDB connection error:', err));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  try {
+    // Check MongoDB connection
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+    
+    // Get memory usage
+    const memoryUsage = process.memoryUsage();
+    const memoryStatus = {
+      rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+      external: Math.round(memoryUsage.external / 1024 / 1024) + 'MB'
+    };
+    
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: dbStatus,
+      memory: memoryStatus
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+});
 
 // Default route
 app.get('*', (req, res) => {
@@ -58,8 +103,11 @@ app.get('*', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    error: 'Internal Server Error',
+    message: err.message 
+  });
 });
 
 // Export the app

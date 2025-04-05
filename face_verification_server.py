@@ -1,3 +1,23 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TensorFlow logging
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'  # Prevent TensorFlow from allocating all GPU memory
+
+# Import TensorFlow before other imports
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')  # Ensure GPU is disabled
+tf.config.threading.set_inter_op_parallelism_threads(1)  # Limit thread usage
+tf.config.threading.set_intra_op_parallelism_threads(1)
+
+# Set memory growth for TensorFlow
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from deepface import DeepFace
@@ -11,13 +31,510 @@ import json
 from io import BytesIO
 from PIL import Image
 import io
+import time
+import gc  # Garbage collection
+import psutil  # Process and system utilities
+import threading
+from queue import Queue
+import logging
+from concurrent.futures import ThreadPoolExecutor
+import tempfile
+import traceback
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Create temp directory
+temp_dir = os.path.join(os.getcwd(), 'temp')
+if not os.path.exists(temp_dir):
+    os.makedirs(temp_dir)
+    logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Backend API configuration
+# Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
+
+# Global variables for memory management
+request_queue = Queue(maxsize=1)  # Limit concurrent requests
+models_initialized = False
+model_lock = threading.Lock()
+executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
+
+# Set DeepFace model directory to a writable location
+DEEPFACE_DIR = os.path.join(os.getcwd(), 'deepface_weights')
+os.makedirs(DEEPFACE_DIR, exist_ok=True)
+os.makedirs(os.path.join(DEEPFACE_DIR, '.deepface', 'weights'), exist_ok=True)
+os.environ['DEEPFACE_HOME'] = DEEPFACE_DIR
+logger.info(f"DeepFace directory set to: {DEEPFACE_DIR}")
+
+def manage_memory():
+    """Aggressive memory management"""
+    try:
+        # Force garbage collection
+        gc.collect()
+        gc.set_threshold(100, 5, 5)  # More aggressive garbage collection
+        
+        # Check memory usage
+        process = psutil.Process(os.getpid())
+        memory_usage = process.memory_info().rss / 1024 / 1024  # Convert to MB
+        
+        if memory_usage > 200:  # If memory usage exceeds 200MB
+            logger.warning(f"High memory usage detected: {memory_usage:.2f}MB")
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Clear TensorFlow session
+            tf.keras.backend.clear_session()
+            
+            # Clear any cached models
+            if 'model' in globals():
+                del globals()['model']
+            
+            # Clear any large variables
+            for var in list(globals().keys()):
+                if var.startswith('_') or var in ['__builtins__', '__file__', '__name__']:
+                    continue
+                if isinstance(globals()[var], (np.ndarray, tf.Tensor)):
+                    del globals()[var]
+            
+            # Force garbage collection again
+            gc.collect()
+            
+            # Log memory after cleanup
+            memory_after = process.memory_info().rss / 1024 / 1024
+            logger.info(f"Memory after cleanup: {memory_after:.2f}MB")
+            
+    except Exception as e:
+        logger.error(f"Error in memory management: {str(e)}")
+
+def initialize_models():
+    """Initialize DeepFace models with a minimal test image"""
+    try:
+        # Create a minimal test image
+        test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+        
+        # Ensure directories exist
+        weights_dir = os.path.join(DEEPFACE_DIR, '.deepface', 'weights')
+        os.makedirs(weights_dir, exist_ok=True)
+        
+        # Test DeepFace with minimal configuration
+        result = DeepFace.verify(test_image, test_image, 
+                               model_name='Facenet',
+                               detector_backend='skip',
+                               enforce_detection=False)
+        
+        logger.info("DeepFace models initialized successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing DeepFace models: {str(e)}")
+        logger.error(f"Current working directory: {os.getcwd()}")
+        logger.error(f"DeepFace directory: {DEEPFACE_DIR}")
+        logger.error(f"Weights directory: {os.path.join(DEEPFACE_DIR, '.deepface', 'weights')}")
+        return False
+
+def process_request(func):
+    """Decorator to handle request queuing and memory management"""
+    def wrapped(*args, **kwargs):
+        try:
+            # Wait for queue slot
+            request_queue.put(True, timeout=30)  # 30 second timeout
+            
+            # Initialize models if needed
+            if not models_initialized and not initialize_models():
+                return jsonify({
+                    'success': False,
+                    'message': 'Service is initializing, please try again in a few seconds'
+                }), 503
+            
+            # Process request in thread pool
+            future = executor.submit(func, *args, **kwargs)
+            result = future.result(timeout=30)  # 30 second timeout
+            
+            return result
+        except Exception as e:
+            logger.error(f"Request processing error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': str(e)
+            }), 500
+        finally:
+            try:
+                request_queue.get_nowait()  # Release queue slot
+            except:
+                pass
+            manage_memory()
+            # Clear any large variables
+            for var in list(locals().keys()):
+                if var.startswith('_') or var in ['self', 'args', 'kwargs']:
+                    continue
+                if isinstance(locals()[var], (np.ndarray, tf.Tensor)):
+                    del locals()[var]
+            gc.collect()
+    wrapped.__name__ = func.__name__  # Preserve the original function name
+    return wrapped
+
+@app.route('/', methods=['GET'])
+def root_health_check():
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Service is running'
+    }), 200
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    try:
+        # Check if models are initialized
+        if not models_initialized:
+            return jsonify({
+                'status': 'error',
+                'message': 'Face verification models not initialized',
+                'error': 'models_not_initialized'
+            }), 503
+
+        # Check memory usage
+        memory = psutil.virtual_memory()
+        memory_status = {
+            'total': memory.total,
+            'available': memory.available,
+            'percent': memory.percent
+        }
+
+        # Check if temp directory is writable
+        try:
+            test_file = os.path.join(temp_dir, 'test.txt')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except Exception as e:
+            logger.error(f"Temp directory not writable: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Temp directory not writable',
+                'error': 'temp_dir_not_writable'
+            }), 503
+
+        return jsonify({
+            'status': 'healthy',
+            'memory': memory_status,
+            'models_initialized': models_initialized,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'error': 'health_check_failed'
+        }), 500
+
+@app.route('/verify', methods=['POST'])
+def verify_face():
+    try:
+        manage_memory()  # Check memory before processing
+        
+        # Log the incoming request
+        logger.info("Received verification request")
+        
+        # Log request headers
+        logger.info(f"Request headers: {dict(request.headers)}")
+        
+        # Check content type
+        if request.content_type != 'application/json':
+            logger.error(f"Invalid content type: {request.content_type}")
+            return jsonify({
+                'success': False,
+                'message': 'Invalid content type. Expected application/json',
+                'error': 'invalid_content_type'
+            }), 400
+        
+        data = request.get_json()
+        if not data:
+            logger.error("No JSON data received in request")
+            return jsonify({
+                'success': False,
+                'message': 'No data received in request',
+                'error': 'missing_data'
+            }), 400
+            
+        # Log the received data structure
+        logger.info(f"Received data keys: {list(data.keys())}")
+        
+        # Check for image fields
+        if 'image1' not in data or 'image2' not in data:
+            logger.error("Missing required image fields")
+            logger.error(f"Available fields: {list(data.keys())}")
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields: image1 and image2',
+                'error': 'missing_images',
+                'received_fields': list(data.keys())
+            }), 400
+
+        # Process both images with memory optimization
+        try:
+            # Process first image
+            image1_data = data['image1'].split(',')[1] if ',' in data['image1'] else data['image1']
+            nparr1 = np.frombuffer(base64.b64decode(image1_data), np.uint8)
+            img1 = cv2.imdecode(nparr1, cv2.IMREAD_COLOR)
+            
+            # Clear memory after processing first image
+            del image1_data, nparr1
+            gc.collect()
+            
+            # Process second image
+            image2_data = data['image2'].split(',')[1] if ',' in data['image2'] else data['image2']
+            nparr2 = np.frombuffer(base64.b64decode(image2_data), np.uint8)
+            img2 = cv2.imdecode(nparr2, cv2.IMREAD_COLOR)
+            
+            # Clear memory after processing second image
+            del image2_data, nparr2
+            gc.collect()
+            
+            if img1 is None or img2 is None:
+                logger.error("Failed to decode one or both images")
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to decode images',
+                    'error': 'image_decode_failed'
+                }), 400
+                
+            # Convert BGR to RGB
+            rgb_img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+            rgb_img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+            
+            # Clear original images
+            del img1, img2
+            gc.collect()
+            
+            # Verify faces using DeepFace with optimized settings
+            result = DeepFace.verify(
+                rgb_img1, 
+                rgb_img2, 
+                model_name='Facenet',
+                detector_backend='skip',  # Skip face detection for self-comparison
+                enforce_detection=False,  # Don't enforce face detection
+                distance_metric='cosine'  # Use cosine distance for better performance
+            )
+            
+            # Clear processed images
+            del rgb_img1, rgb_img2
+            gc.collect()
+            
+            # Calculate match percentage
+            distance = float(result['distance'])
+            threshold = float(result['threshold'])
+            match_percentage = max(0, min(100, (1 - (distance / threshold)) * 100))
+            
+            # Clear result dictionary
+            del result
+            gc.collect()
+            
+            return jsonify({
+                'success': True,
+                'verified': True if match_percentage >= 70 else False,  # 70% threshold for match
+                'distance': distance,
+                'threshold': threshold,
+                'matchPercentage': match_percentage,
+                'isMatch': True if match_percentage >= 70 else False
+            })
+        except Exception as e:
+            logger.error(f"Image processing error: {str(e)}")
+            if "No face detected" in str(e):
+                return jsonify({
+                    'success': False,
+                    'message': 'No face detected in one or both images',
+                    'error': 'no_face_detected',
+                    'matchPercentage': 0,
+                    'isMatch': False
+                }), 400
+            return jsonify({
+                'success': False,
+                'message': f'Error processing images: {str(e)}',
+                'error': 'image_processing_error',
+                'matchPercentage': 0,
+                'isMatch': False
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Verification error: {str(e)}")
+        logger.error(f"Request data: {str(data)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error verifying faces: {str(e)}',
+            'error': 'verification_error',
+            'matchPercentage': 0,
+            'isMatch': False
+        }), 500
+    finally:
+        # Final cleanup
+        manage_memory()
+        tf.keras.backend.clear_session()
+        gc.collect()
+
+@app.route('/register', methods=['POST'])
+@process_request
+def register_face():
+    try:
+        data = request.get_json()
+        if not data or 'userId' not in data or 'faceImage' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Missing required fields: userId and faceImage'
+            }), 400
+
+        # Process image in memory
+        image_data = data['faceImage'].split(',')[1] if ',' in data['faceImage'] else data['faceImage']
+        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Verify face
+        try:
+            DeepFace.verify(img, img, model_name='Facenet')
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'message': f'Face verification failed: {str(e)}'
+            }), 400
+
+        return jsonify({
+            'success': True,
+            'message': 'Face registered successfully'
+        })
+    except Exception as e:
+        print(f"Registration error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error registering face: {str(e)}'
+        }), 500
+
+@app.route('/verify-voting', methods=['POST'])
+def verify_voting():
+    try:
+        data = request.get_json()
+        if not data or 'image' not in data or 'voterId' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Image and voter ID are required'
+            }), 400
+
+        # Get voter's registered face from backend
+        try:
+            response = requests.get(
+                f"{BACKEND_URL}/api/users/{data['voterId']}",
+                headers={'Authorization': f'Bearer {BACKEND_API_KEY}'}
+            )
+            if response.status_code != 200:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to fetch voter data'
+                }), 400
+
+            voter_data = response.json()
+            
+            # Get the registered face image URL from Cloudinary
+            registered_face_url = voter_data.get('faceImageUrl')
+            if not registered_face_url:
+                return jsonify({
+                    'success': False,
+                    'error': 'Registered face image not found'
+                }), 400
+
+            # Download the registered face image from Cloudinary
+            registered_face_response = requests.get(registered_face_url)
+            if registered_face_response.status_code != 200:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to fetch registered face image'
+                }), 400
+
+            # Save registered face image temporarily
+            with open('temp_registered.jpg', 'wb') as f:
+                f.write(registered_face_response.content)
+
+            # Save current image temporarily
+            current_image = base64_to_image(data['image'])
+            current_image.save('temp_current.jpg')
+
+            # Verify faces using DeepFace
+            registered_face_encoding = DeepFace.encode(np.array(Image.open('temp_registered.jpg')))[0]
+            current_face_encoding = DeepFace.encode(np.array(current_image))[0]
+            face_distances = DeepFace.face_distance([registered_face_encoding], current_face_encoding)
+            distance = float(face_distances[0])
+            
+            # Define threshold for face match (0.6 = 60%)
+            threshold = 0.6
+            
+            # Calculate match percentage for display
+            similarity = 1 - distance
+            match_percentage = min(100, max(0, (similarity - threshold) * 100 / (1 - threshold)))
+            
+            # Only proceed with Cloudinary upload if match is above threshold
+            if similarity > threshold:
+                try:
+                    # Convert current image to base64 for Cloudinary
+                    _, buffer = cv2.imencode('.jpg', np.array(current_image))
+                    img_str = base64.b64encode(buffer).decode('utf-8')
+                    data_uri = f'data:image/jpeg;base64,{img_str}'
+
+                    # Upload to Cloudinary
+                    cloudinary_response = requests.post(
+                        f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
+                        files={'file': data_uri},
+                        data={
+                            'api_key': os.environ.get('CLOUDINARY_API_KEY'),
+                            'timestamp': int(datetime.now().timestamp()),
+                            'folder': 'face-verification'
+                        }
+                    )
+
+                    if cloudinary_response.status_code != 200:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Failed to upload verification image'
+                        }), 500
+
+                    cloudinary_data = cloudinary_response.json()
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'Face identified successfully',
+                        'matchPercentage': match_percentage,
+                        'voter': voter_data,
+                        'imageUrl': cloudinary_data['secure_url'],
+                        'pythonService': 'primary'
+                    })
+                except Exception as e:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Failed to process verification: {str(e)}'
+                    }), 500
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Face does not match registered face',
+                    'matchPercentage': match_percentage,
+                    'error': 'Face verification failed'
+                }), 401
+
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to fetch voter data: {str(e)}'
+            }), 500
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 def download_image_from_url(url):
     try:
@@ -86,371 +603,40 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat()
-    })
+# Initialize models at startup
+try:
+    if not initialize_models():
+        logger.error("Failed to initialize models at startup")
+        raise Exception("Failed to initialize face verification models")
+    models_initialized = True
+    logger.info("Models initialized successfully at startup")
+except Exception as e:
+    logger.error(f"Error during model initialization: {str(e)}")
+    models_initialized = False
 
-@app.route('/verify', methods=['POST'])
-def verify_face():
-    try:
-        data = request.get_json()
-        print("Received verification request:", data.keys())
-        
-        if not data or 'image1' not in data or 'image2' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Both images are required'
-            }), 400
-        
-        # Create temp directory if it doesn't exist
-        temp_dir = 'temp'
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-        
-        # Process first image (captured image)
-        try:
-            print("Processing captured image...")
-            image1 = base64_to_image(data['image1'])
-            
-            # Save temporarily for DeepFace
-            temp_path1 = os.path.join(temp_dir, 'temp1.jpg')
-            image1.save(temp_path1, 'JPEG')
-            print("Successfully processed captured image")
-        except Exception as e:
-            print("Error processing captured image:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error processing captured image: {str(e)}'
-            }), 400
-        
-        # Process second image (registered image)
-        try:
-            print("Processing registered image...")
-            if isinstance(data['image2'], str):
-                if data['image2'].startswith('http'):
-                    # Download from URL
-                    image2 = download_image_from_url(data['image2'])
-                else:
-                    # Process base64
-                    image2 = base64_to_image(data['image2'])
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Invalid image2 format'
-                }), 400
-            
-            # Save temporarily for DeepFace
-            temp_path2 = os.path.join(temp_dir, 'temp2.jpg')
-            image2.save(temp_path2, 'JPEG')
-            print("Successfully processed registered image")
-        except Exception as e:
-            print("Error processing registered image:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error processing registered image: {str(e)}'
-            }), 400
-        
-        # Verify faces using DeepFace with multiple models for increased accuracy
-        try:
-            print("Verifying faces with DeepFace...")
-            
-            # Use multiple models for verification
-            models = ['VGG-Face', 'Facenet', 'OpenFace']
-            verification_results = []
-            
-            for model in models:
-                result = DeepFace.verify(
-                    img1_path=temp_path1,
-                    img2_path=temp_path2,
-                    model_name=model,
-                    detector_backend='opencv',
-                    distance_metric='cosine',
-                    enforce_detection=True,
-                    align=True
-                )
-                verification_results.append(1 - result['distance'])  # Convert distance to similarity
-            
-            # Clean up temporary files
-            if os.path.exists(temp_path1):
-                os.remove(temp_path1)
-            if os.path.exists(temp_path2):
-                os.remove(temp_path2)
-            
-            # Calculate average similarity across models
-            avg_similarity = sum(verification_results) / len(verification_results)
-            print(f"Average similarity across models: {avg_similarity}")
-            
-            # Define more reasonable verification thresholds
-            VERY_HIGH_CONFIDENCE = 0.85  # 85% similarity
-            HIGH_CONFIDENCE = 0.80  # 80% similarity
-            MEDIUM_CONFIDENCE = 0.75
-            
-            # Determine confidence level
-            if avg_similarity >= VERY_HIGH_CONFIDENCE:
-                confidence_level = 'VERY_HIGH'
-            elif avg_similarity >= HIGH_CONFIDENCE:
-                confidence_level = 'HIGH'
-            elif avg_similarity >= MEDIUM_CONFIDENCE:
-                confidence_level = 'MEDIUM'
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Face verification failed: Insufficient similarity',
-                    'matchPercentage': avg_similarity,
-                    'details': {
-                        'average_similarity': avg_similarity,
-                        'model_similarities': dict(zip(models, verification_results))
-                    }
-                }), 401
-            
-            verification_status = {
-                'success': True,
-                'matchPercentage': avg_similarity,
-                'confidenceLevel': confidence_level,
-                'modelResults': {model: score for model, score in zip(models, verification_results)},
-                'recommendations': []
-            }
-            
-            return jsonify(verification_status)
-        except Exception as e:
-            # Clean up temporary files
-            if os.path.exists(temp_path1):
-                os.remove(temp_path1)
-            if os.path.exists(temp_path2):
-                os.remove(temp_path2)
-                
-            print("Error in DeepFace verification:", str(e))
-            return jsonify({
-                'success': False,
-                'error': f'Error in face verification: {str(e)}'
-            }), 500
-        
-    except Exception as e:
-        print(f"Face verification error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/register', methods=['POST'])
-def register_face():
-    try:
-        data = request.get_json()
-        print("Received registration request")
-        
-        if not data or 'userId' not in data or 'faceImage' not in data:
-            return jsonify({
-                'success': False,
-                'message': 'User ID and face image are required'
-            }), 400
-
-        print("Processing face image...")
-        try:
-            # Remove data URL prefix if present
-            face_image = data['faceImage']
-            if ',' in face_image:
-                face_image = face_image.split(',')[1]
-            
-            # Decode base64 string
-            img_data = base64.b64decode(face_image)
-            nparr = np.frombuffer(img_data, np.uint8)
-            opencv_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if opencv_image is None:
-                raise Exception("Failed to decode image")
-                
-            print("Image decoded successfully")
-        except Exception as e:
-            print(f"Error processing image: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': f'Error processing image: {str(e)}'
-            }), 400
-        
-        # Create temp directory if it doesn't exist
-        temp_dir = 'temp'
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-        
-        # Save image temporarily for DeepFace
-        temp_path = os.path.join(temp_dir, f'temp_register_{data["userId"]}.jpg')
-        cv2.imwrite(temp_path, opencv_image)
-        
-        try:
-            # Verify that DeepFace can detect and process the face
-            result = DeepFace.verify(
-                img1_path=temp_path,
-                img2_path=temp_path,
-                model_name='VGG-Face',
-                detector_backend='opencv',
-                enforce_detection=True,
-                align=True
-            )
-            
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            
-            # Return success response with face embedding
-            return jsonify({
-                'success': True,
-                'message': 'Face registered successfully',
-                'userId': data['userId'],
-                'verified': True
-            })
-        except Exception as e:
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                
-            print(f"Error in face registration: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': f'Error in face registration: {str(e)}'
-            }), 400
-
-    except Exception as e:
-        print(f"Registration error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Error registering face: {str(e)}'
-        }), 500
-
-@app.route('/verify-voting', methods=['POST'])
-def verify_voting():
-    try:
-        data = request.get_json()
-        if not data or 'image' not in data or 'voterId' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Image and voter ID are required'
-            }), 400
-
-        # Get voter's registered face from backend
-        try:
-            response = requests.get(
-                f"{BACKEND_URL}/api/users/{data['voterId']}",
-                headers={'Authorization': f'Bearer {BACKEND_API_KEY}'}
-            )
-            if response.status_code != 200:
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to fetch voter data'
-                }), 400
-
-            voter_data = response.json()
-            
-            # Get the registered face image URL from Cloudinary
-            registered_face_url = voter_data.get('faceImageUrl')
-            if not registered_face_url:
-                return jsonify({
-                    'success': False,
-                    'error': 'Registered face image not found'
-                }), 400
-
-            # Download the registered face image from Cloudinary
-            registered_face_response = requests.get(registered_face_url)
-            if registered_face_response.status_code != 200:
-                return jsonify({
-                    'success': False,
-                    'error': 'Failed to fetch registered face image'
-                }), 400
-
-            # Save registered face image temporarily
-            with open('temp_registered.jpg', 'wb') as f:
-                f.write(registered_face_response.content)
-
-            # Save current image temporarily
-            current_image = base64_to_image(data['image'])
-            current_image.save('temp_current.jpg')
-
-            # Verify faces using DeepFace
-            result = DeepFace.verify(
-                img1_path='temp_current.jpg',
-                img2_path='temp_registered.jpg',
-                model_name='VGG-Face',
-                detector_backend='opencv',
-                distance_metric='cosine',
-                enforce_detection=True,
-                align=True
-            )
-
-            # Clean up temporary files
-            os.remove('temp_registered.jpg')
-            os.remove('temp_current.jpg')
-
-            # Convert distance to similarity percentage (0-1)
-            similarity = 1 - result['distance']
-            
-            # Define threshold for face match (0.75 = 75%)
-            threshold = 0.75
-            
-            # Calculate match percentage for display
-            match_percentage = min(100, max(0, (similarity - threshold) * 100 / (1 - threshold)))
-            
-            # Only proceed with Cloudinary upload if match is above threshold
-            if similarity > threshold:
-                try:
-                    # Convert current image to base64 for Cloudinary
-                    _, buffer = cv2.imencode('.jpg', np.array(current_image))
-                    img_str = base64.b64encode(buffer).decode('utf-8')
-                    data_uri = f'data:image/jpeg;base64,{img_str}'
-
-                    # Upload to Cloudinary
-                    cloudinary_response = requests.post(
-                        f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
-                        files={'file': data_uri},
-                        data={
-                            'api_key': os.environ.get('CLOUDINARY_API_KEY'),
-                            'timestamp': int(datetime.now().timestamp()),
-                            'folder': 'face-verification'
-                        }
-                    )
-
-                    if cloudinary_response.status_code != 200:
-                        return jsonify({
-                            'success': False,
-                            'error': 'Failed to upload verification image'
-                        }), 500
-
-                    cloudinary_data = cloudinary_response.json()
-                    
-                    return jsonify({
-                        'success': True,
-                        'message': 'Face identified successfully',
-                        'matchPercentage': match_percentage,
-                        'voter': voter_data,
-                        'imageUrl': cloudinary_data['secure_url'],
-                        'pythonService': 'primary'
-                    })
-                except Exception as e:
-                    return jsonify({
-                        'success': False,
-                        'error': f'Failed to process verification: {str(e)}'
-                    }), 500
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Face does not match registered face',
-                    'matchPercentage': match_percentage,
-                    'error': 'Face verification failed'
-                }), 401
-
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Failed to fetch voter data: {str(e)}'
-            }), 500
-
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
+# Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
-    port = int(os.environ.get('FACE_VERIFICATION_PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # Get port from environment variable with better error handling
+    try:
+        port = int(os.environ.get('PORT', 5001))
+        host = '0.0.0.0'
+        
+        logger.info(f"Starting server on {host}:{port}...")
+        logger.info(f"Environment variables:")
+        logger.info(f"PORT: {port}")
+        logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
+        logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
+        
+        # Force the server to bind to all interfaces
+        app.run(
+            host=host,
+            port=port,
+            debug=False,
+            threaded=True,
+            use_reloader=False
+        )
+    except Exception as e:
+        logger.error(f"Failed to start server: {str(e)}")
+        logger.error(f"PORT environment variable: {os.environ.get('PORT')}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise

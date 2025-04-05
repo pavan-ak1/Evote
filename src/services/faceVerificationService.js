@@ -3,13 +3,131 @@ const cloudinary = require('cloudinary').v2;
 
 class FaceVerificationService {
     constructor() {
-        this.baseURL = `http://localhost:${process.env.FACE_VERIFICATION_PORT || 5000}`;
+        this.baseURL = process.env.PYTHON_SERVICE_URL || 'https://voter-verify-face.onrender.com';
         this.maxRetries = 3;
         this.retryDelay = 5000; // 5 seconds
+        this.initialized = false;
     }
 
     async sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async checkServiceHealth() {
+        try {
+            // Try to connect to the service directly
+            const response = await axios.get(this.baseURL, {
+                timeout: 10000, // Increased timeout
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            // Check if service is healthy
+            if (response.data && response.data.status === 'healthy') {
+                this.initialized = true;
+                return true;
+            }
+
+            // If service is not healthy, return false
+            console.error('Service health check failed:', response.data);
+            return false;
+        } catch (error) {
+            // If we get a 404 for /health, but the service is responding, consider it healthy
+            if (error.response?.status === 404) {
+                this.initialized = true;
+                return true;
+            }
+            console.error('Face service health check failed:', error.message);
+            return false;
+        }
+    }
+
+    async waitForService(maxAttempts = 3) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            if (await this.checkServiceHealth()) {
+                return true;
+            }
+            if (attempt < maxAttempts) {
+                await this.sleep(this.retryDelay);
+            }
+        }
+        return false;
+    }
+
+    async registerFace(userId, faceImage) {
+        let lastError = null;
+        
+        // Wait for service to be ready
+        if (!this.initialized && !(await this.waitForService())) {
+            throw new Error('Face registration service is temporarily unavailable');
+        }
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                // Validate inputs
+                if (!userId || !faceImage) {
+                    throw new Error('User ID and face image are required');
+                }
+
+                // Process the face image
+                let processedImage = faceImage;
+                if (!processedImage.startsWith('data:image')) {
+                    processedImage = `data:image/jpeg;base64,${processedImage}`;
+                }
+
+                // Register face with Python service
+                const response = await axios.post(`${this.baseURL}/register`, {
+                    userId,
+                    faceImage: processedImage
+                }, {
+                    timeout: 30000,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.data || !response.data.success) {
+                    throw new Error(response.data?.message || 'Face registration failed');
+                }
+
+                // Upload to Cloudinary for storage
+                const uploadResponse = await cloudinary.uploader.upload(processedImage, {
+                    folder: 'face-registration',
+                    resource_type: 'auto',
+                    timeout: 30000
+                });
+
+                if (!uploadResponse || !uploadResponse.secure_url) {
+                    throw new Error('Failed to upload face image to Cloudinary');
+                }
+
+                return {
+                    success: true,
+                    faceImageUrl: uploadResponse.secure_url,
+                    verified: response.data.verified || false
+                };
+
+            } catch (error) {
+                console.error(`Registration attempt ${attempt} failed:`, error.response?.data || error.message);
+                lastError = error;
+                
+                // If service is not responding, try to reinitialize
+                if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+                    this.initialized = false;
+                    if (await this.waitForService()) {
+                        continue;
+                    }
+                }
+                
+                if (attempt < this.maxRetries) {
+                    await this.sleep(this.retryDelay);
+                }
+            }
+        }
+
+        // If we get here, all retries failed
+        throw new Error(lastError?.response?.data?.message || lastError?.message || 'Face registration failed after all retries');
     }
 
     async verifyFace(image1, image2) {
@@ -17,6 +135,17 @@ class FaceVerificationService {
         
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
+                // Check service health first
+                const isHealthy = await this.checkServiceHealth();
+                if (!isHealthy) {
+                    throw new Error('Face verification service is unavailable');
+                }
+
+                // Validate input images
+                if (!image1 || !image2) {
+                    throw new Error('Both images are required for verification');
+                }
+
                 // Ensure both images are in the correct format
                 let processedImage1 = image1;
                 let processedImage2 = image2;
@@ -43,95 +172,41 @@ class FaceVerificationService {
                     processedImage2 = `data:image/jpeg;base64,${processedImage2}`;
                 }
 
-                console.log(`Attempt ${attempt}/${this.maxRetries}: Sending verification request to:`, `${this.baseURL}/verify`);
-                console.log('Image1 format:', processedImage1.substring(0, 50) + '...');
-                console.log('Image2 format:', processedImage2.substring(0, 50) + '...');
-
                 const response = await axios.post(`${this.baseURL}/verify`, {
                     image1: processedImage1,
                     image2: processedImage2
                 }, {
-                    timeout: 60000 // 60 second timeout for verification
+                    timeout: 30000,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
 
-                console.log('Verification response:', response.data);
-
-                if (!response.data || typeof response.data.success === 'undefined') {
+                if (!response.data) {
                     throw new Error('Invalid response from face verification service');
                 }
 
-                // Convert the response to match the expected format
                 return {
-                    success: response.data.success,
-                    isMatch: response.data.matchPercentage >= 0.75, // 75% threshold
-                    matchPercentage: response.data.matchPercentage * 100
+                    success: true,
+                    matchPercentage: response.data.matchPercentage || 0,
+                    error: null
                 };
+
             } catch (error) {
+                console.error(`Attempt ${attempt} failed:`, error.response?.data || error.message);
                 lastError = error;
-                console.error(`Attempt ${attempt}/${this.maxRetries} failed:`, error.message);
-                
-                // Handle 401 response specifically
-                if (error.response?.status === 401) {
-                    return {
-                        success: false,
-                        isMatch: false,
-                        matchPercentage: error.response.data.matchPercentage * 100,
-                        error: error.response.data.error
-                    };
-                }
                 
                 if (attempt < this.maxRetries) {
-                    console.log(`Retrying in ${this.retryDelay/1000} seconds...`);
                     await this.sleep(this.retryDelay);
                 }
             }
         }
 
-        // If we get here, all retries failed
-        console.error('All verification attempts failed');
-        if (lastError.response?.data) {
-            throw new Error(`Face verification service error: ${lastError.response.data.error || lastError.message}`);
-        }
-        throw new Error(`Face verification service error: ${lastError.message}`);
-    }
-
-    async registerFace(userId, faceImage) {
-        try {
-            // First, validate the face using the Python service
-            const validationResponse = await axios.post(`${this.baseURL}/register`, {
-                userId,
-                faceImage
-            });
-
-            if (!validationResponse.data.success) {
-                throw new Error(validationResponse.data.message || 'Face validation failed');
-            }
-
-            // If validation successful, upload to Cloudinary
-            const uploadResponse = await cloudinary.uploader.upload(faceImage, {
-                folder: 'face-registration',
-                resource_type: 'auto'
-            });
-
-            return {
-                success: true,
-                faceImageUrl: uploadResponse.secure_url,
-                verified: validationResponse.data.verified
-            };
-        } catch (error) {
-            console.error('Face registration error:', error.response?.data || error.message);
-            throw error;
-        }
-    }
-
-    async checkHealth() {
-        try {
-            const response = await axios.get(`${this.baseURL}/health`);
-            return response.data;
-        } catch (error) {
-            console.error('Health check error:', error.response?.data || error.message);
-            throw error;
-        }
+        return {
+            success: false,
+            matchPercentage: 0,
+            error: lastError?.response?.data?.message || lastError?.message || 'Face verification failed after all retries'
+        };
     }
 }
 

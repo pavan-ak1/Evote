@@ -153,10 +153,210 @@ async function fetchSlots(date) {
       return;
     }
 
+<<<<<<< HEAD
     const response = await fetch(`/api/slots/available?date=${date}`, {
       headers: {
         "Authorization": `Bearer ${token}`
       }
+=======
+        const response = await fetch(`https://voter-verify-backend.onrender.com/api/slots/available?date=${date}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch time slots.");
+        }
+
+        const slots = await response.json();
+        console.log("Fetched slots:", slots);
+        displaySlots(slots);
+      } catch (error) {
+        console.error("Error fetching slots:", error);
+        slotsContainer.innerHTML = "<p style='color: red;'>Error fetching time slots.</p>";
+      }
+    }
+
+    /***********************************
+     * DISPLAY AVAILABLE SLOTS
+     ***********************************/
+    function displaySlots(slots) {
+      const slotsContainer = document.getElementById("slots-container");
+      slotsContainer.innerHTML = "";
+      if (!slots.length) {
+        slotsContainer.innerHTML = "<p>No slots available for this date.</p>";
+        return;
+      }
+      slots.forEach(slot => {
+        const slotDiv = document.createElement("div");
+        slotDiv.classList.add("slot");
+        // Mark as "booked" if capacity is reached
+        slotDiv.classList.add(slot.bookedVoters.length >= slot.maxCapacity ? "booked" : "available");
+
+        // Build the HTML for each slot
+        slotDiv.innerHTML = `
+          <div>
+            <strong>${slot.startTime} - ${slot.endTime}</strong><br>
+            Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}<br>
+            <small>Slot ID: ${slot._id}</small>
+          </div>
+          <div>
+            <button class="book-btn" onclick="bookSlot('${slot._id}')" ${
+              slot.bookedVoters.length >= slot.maxCapacity ? "disabled" : ""
+            }>
+              ${slot.bookedVoters.length >= slot.maxCapacity ? "Slot Full" : "Book Slot"}
+            </button>
+          </div>
+        `;
+        slotsContainer.appendChild(slotDiv);
+      });
+    }
+
+    /***********************************
+     * BOOK A TIME SLOT
+     ***********************************/
+    async function bookSlot(slotId) {
+      if (!slotId) {
+        showMessage('Slot ID is required', 'error');
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
+
+        const response = await fetch("https://voter-verify-backend.onrender.com/api/slots/book", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ slotId })
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          const data = await response.json();
+          throw new Error(data.error || "Failed to book slot");
+        }
+
+        const data = await response.json();
+        showMessage("Slot booked successfully!", "success");
+        fetchSlots(document.getElementById("slot-date").value); // Refresh the slots list
+        
+      } catch (error) {
+        console.error("Error booking slot:", error);
+        showMessage(error.message || "Failed to book slot", "error");
+      }
+    }
+
+    /***********************************
+     * UPDATE BOOKED SLOTS DISPLAY
+     ***********************************/
+    function updateBookedSlotsDisplay() {
+      const bookedContainer = document.getElementById("booked-slots-container");
+      if (!bookedSlots || bookedSlots.length === 0) {
+        bookedContainer.innerHTML = "<p>You have no booked slots.</p>";
+        return;
+      }
+
+      bookedContainer.innerHTML = "<h3>Your Booked Slots:</h3>";
+      bookedSlots.forEach(slot => {
+        const slotDiv = document.createElement("div");
+        slotDiv.classList.add("booked-slot");
+        slotDiv.classList.add("booked");
+        slotDiv.innerHTML = `
+          <div>
+            <strong>Date:</strong> ${slot.date}<br>
+            <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
+            <strong>Status:</strong> Confirmed
+          </div>
+          <div>
+            <button class="book-btn" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
+          </div>
+        `;
+        bookedContainer.appendChild(slotDiv);
+      });
+    }
+
+    /***********************************
+     * FETCH BOOKED SLOTS FOR THE VOTER
+     ***********************************/
+    async function fetchBookedSlots() {
+      const bookedContainer = document.getElementById("booked-slots-container");
+      bookedContainer.innerHTML = `<p class="loading">Loading booked slots...</p>`;
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
+
+        const response = await fetch("/api/slots/booked", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch booked slots");
+        }
+
+        const data = await response.json();
+        bookedSlots = data;
+        updateBookedSlotsDisplay();
+      } catch (error) {
+        console.error("Error fetching booked slots:", error);
+        if (error.message.includes("Authentication failed")) {
+          window.location.href = "/login.html";
+        }
+      }
+    }
+
+    /***********************************
+     * COPY SLOT ID FUNCTION
+     ***********************************/
+    function copySlotID(slotId) {
+      navigator.clipboard
+        .writeText(slotId)
+        .then(() => {
+          const successMessage = document.getElementById('success-message');
+          successMessage.textContent = `Slot ID copied: ${slotId}`;
+          successMessage.style.display = 'block';
+          successMessage.style.opacity = '1';
+          
+          // Hide the message after 3 seconds
+          setTimeout(() => {
+            successMessage.style.opacity = '0';
+            setTimeout(() => {
+              successMessage.style.display = 'none';
+            }, 300);
+          }, 3000);
+        })
+        .catch(err => console.error("Failed to copy:", err));
+    }
+
+    /***********************************
+     * NAVIGATE TO QUEUE STATUS PAGE
+     ***********************************/
+    document.getElementById("view-queue-status").addEventListener("click", () => {
+      window.location.href = "/queue-status.html";
+>>>>>>> 907be704e0235933efa46406cc7efd0403b120d3
     });
 
     if (!response.ok) {
@@ -251,6 +451,7 @@ async function bookSlot(event) {
       body: JSON.stringify({ slotId })
     });
 
+<<<<<<< HEAD
     if (!response.ok) {
       if (response.status === 401) {
         window.location.href = "/login.html";
@@ -404,6 +605,19 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "/dashboard.html";
   });
 });
+=======
+    function showMessage(message, type) {
+      const successMessage = document.getElementById("success-message");
+      successMessage.textContent = message;
+      successMessage.style.display = "block";
+      successMessage.style.backgroundColor = type === "success" ? "#28a745" : "#dc3545";
+      
+      // Hide message after 5 seconds
+      setTimeout(() => {
+        successMessage.style.display = "none";
+      }, 5000);
+    }
+>>>>>>> 907be704e0235933efa46406cc7efd0403b120d3
   </script>
 </body>
 </html>
