@@ -19,7 +19,7 @@ if gpus:
         print(e)
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin  # <-- Added cross_origin import
 from deepface import DeepFace
 import numpy as np
 import base64
@@ -56,16 +56,9 @@ if not os.path.exists(temp_dir):
 
 app = Flask(__name__)
 # Configure CORS to allow all origins for development
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",  # Allow all origins
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Accept"],
-        "supports_credentials": False
-    }
-})
+CORS(app)
 
-# Add a global OPTIONS handler
+# Global OPTIONS handler (optional; if you run into conflicts you may remove this handler)
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
@@ -144,7 +137,7 @@ def initialize_models():
         
         # Initialize face detector with minimal settings
         detector_backend = 'skip'  # Skip face detection for initialization
-        DeepFace.extract_faces(img_path = test_image, target_size = (16, 16), detector_backend = detector_backend)
+        DeepFace.extract_faces(img_path=test_image, target_size=(16, 16), detector_backend=detector_backend)
         
         logger.info("Models initialized successfully")
         return True
@@ -254,10 +247,8 @@ def verify_face():
     try:
         manage_memory()  # Check memory before processing
         
-        # Log the incoming request
         logger.info("Received verification request")
         
-        # Check content type
         if request.content_type != 'application/json':
             return jsonify({
                 'success': False,
@@ -271,30 +262,24 @@ def verify_face():
                 'message': 'No data received in request'
             }), 400
             
-        # Check for required fields
         if 'image1' not in data or 'image2' not in data:
             return jsonify({
                 'success': False,
                 'message': 'Missing required fields: image1 and image2'
             }), 400
 
-        # Process images with memory optimization
         try:
-            # Process first image
             image1_data = data['image1'].split(',')[1] if ',' in data['image1'] else data['image1']
             nparr1 = np.frombuffer(base64.b64decode(image1_data), np.uint8)
             img1 = cv2.imdecode(nparr1, cv2.IMREAD_COLOR)
             
-            # Clear memory after processing first image
             del image1_data, nparr1
             gc.collect()
             
-            # Process second image
             image2_data = data['image2'].split(',')[1] if ',' in data['image2'] else data['image2']
             nparr2 = np.frombuffer(base64.b64decode(image2_data), np.uint8)
             img2 = cv2.imdecode(nparr2, cv2.IMREAD_COLOR)
             
-            # Clear memory after processing second image
             del image2_data, nparr2
             gc.collect()
             
@@ -304,40 +289,34 @@ def verify_face():
                     'message': 'Failed to decode images'
                 }), 400
                 
-            # Convert BGR to RGB
             rgb_img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
             rgb_img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
             
-            # Clear original images
             del img1, img2
             gc.collect()
             
-            # Verify faces using DeepFace with optimized settings
             result = DeepFace.verify(
                 rgb_img1, 
                 rgb_img2, 
-                model_name='Facenet',  # Use only Facenet for faster processing
-                detector_backend='skip',  # Skip face detection for self-comparison
-                enforce_detection=False,  # Don't enforce face detection
-                distance_metric='cosine'  # Use cosine distance for better performance
+                model_name='Facenet',
+                detector_backend='skip',
+                enforce_detection=False,
+                distance_metric='cosine'
             )
             
-            # Clear processed images
             del rgb_img1, rgb_img2
             gc.collect()
             
-            # Calculate match percentage
             distance = float(result['distance'])
             threshold = float(result['threshold'])
             match_percentage = max(0, min(100, (1 - (distance / threshold)) * 100))
             
-            # Clear result dictionary
             del result
             gc.collect()
             
             return jsonify({
                 'success': True,
-                'verified': True if match_percentage >= 70 else False,  # 70% threshold for match
+                'verified': True if match_percentage >= 70 else False,
                 'distance': distance,
                 'threshold': threshold,
                 'matchPercentage': match_percentage,
@@ -368,7 +347,6 @@ def verify_face():
             'isMatch': False
         }), 500
     finally:
-        # Final cleanup
         manage_memory()
         tf.keras.backend.clear_session()
         gc.collect()
@@ -377,14 +355,11 @@ def verify_face():
 @process_request
 def register_face():
     try:
-        # Log the incoming request
         logger.info("Received registration request")
         
-        # Handle OPTIONS request
         if request.method == 'OPTIONS':
             return jsonify({'status': 'ok'}), 200
         
-        # Check content type
         if request.content_type != 'application/json':
             return jsonify({
                 'success': False,
@@ -398,21 +373,17 @@ def register_face():
                 'message': 'No data received in request'
             }), 400
             
-        # Check for required fields
         if 'userId' not in data or 'faceImage' not in data:
             return jsonify({
                 'success': False,
                 'message': 'Missing required fields: userId and faceImage'
             }), 400
 
-        # Process image with memory optimization
         try:
-            # Process image
             image_data = data['faceImage'].split(',')[1] if ',' in data['faceImage'] else data['faceImage']
             nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
-            # Clear memory after processing image
             del image_data, nparr
             gc.collect()
             
@@ -422,22 +393,19 @@ def register_face():
                     'message': 'Failed to decode image'
                 }), 400
                 
-            # Convert BGR to RGB
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             
-            # Clear original image
             del img
             gc.collect()
             
-            # Verify face using DeepFace with optimized settings
             try:
                 DeepFace.verify(
                     rgb_img, 
                     rgb_img, 
-                    model_name='Facenet',  # Use only Facenet for faster processing
-                    detector_backend='skip',  # Skip face detection for self-comparison
-                    enforce_detection=False,  # Don't enforce face detection
-                    distance_metric='cosine'  # Use cosine distance for better performance
+                    model_name='Facenet',
+                    detector_backend='skip',
+                    enforce_detection=False,
+                    distance_metric='cosine'
                 )
             except Exception as e:
                 if "No face detected" in str(e):
@@ -447,11 +415,9 @@ def register_face():
                     }), 400
                 raise e
             
-            # Clear processed image
             del rgb_img
             gc.collect()
             
-            # Save the face image
             user_id = data['userId']
             face_image_path = os.path.join(temp_dir, f'{user_id}_face.txt')
             
@@ -478,7 +444,6 @@ def register_face():
             'message': f'Error registering face: {str(e)}'
         }), 500
     finally:
-        # Final cleanup
         manage_memory()
         tf.keras.backend.clear_session()
         gc.collect()
@@ -493,7 +458,6 @@ def verify_voting():
                 'error': 'Image and voter ID are required'
             }), 400
 
-        # Get voter's registered face from backend
         try:
             response = requests.get(
                 f"{BACKEND_URL}/api/users/{data['voterId']}",
@@ -507,7 +471,6 @@ def verify_voting():
 
             voter_data = response.json()
             
-            # Get the registered face image URL from Cloudinary
             registered_face_url = voter_data.get('faceImageUrl')
             if not registered_face_url:
                 return jsonify({
@@ -515,7 +478,6 @@ def verify_voting():
                     'error': 'Registered face image not found'
                 }), 400
 
-            # Download the registered face image from Cloudinary
             registered_face_response = requests.get(registered_face_url)
             if registered_face_response.status_code != 200:
                 return jsonify({
@@ -523,36 +485,27 @@ def verify_voting():
                     'error': 'Failed to fetch registered face image'
                 }), 400
 
-            # Save registered face image temporarily
             with open('temp_registered.jpg', 'wb') as f:
                 f.write(registered_face_response.content)
 
-            # Save current image temporarily
             current_image = base64_to_image(data['image'])
             current_image.save('temp_current.jpg')
 
-            # Verify faces using DeepFace
             registered_face_encoding = DeepFace.encode(np.array(Image.open('temp_registered.jpg')))[0]
             current_face_encoding = DeepFace.encode(np.array(current_image))[0]
             face_distances = DeepFace.face_distance([registered_face_encoding], current_face_encoding)
             distance = float(face_distances[0])
             
-            # Define threshold for face match (0.6 = 60%)
             threshold = 0.6
-            
-            # Calculate match percentage for display
             similarity = 1 - distance
             match_percentage = min(100, max(0, (similarity - threshold) * 100 / (1 - threshold)))
             
-            # Only proceed with Cloudinary upload if match is above threshold
             if similarity > threshold:
                 try:
-                    # Convert current image to base64 for Cloudinary
                     _, buffer = cv2.imencode('.jpg', np.array(current_image))
                     img_str = base64.b64encode(buffer).decode('utf-8')
                     data_uri = f'data:image/jpeg;base64,{img_str}'
 
-                    # Upload to Cloudinary
                     cloudinary_response = requests.post(
                         f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
                         files={'file': data_uri},
@@ -627,7 +580,6 @@ def base64_to_image(base64_string):
         image_data = base64.b64decode(base64_string)
         image = Image.open(BytesIO(image_data))
         
-        # Convert RGBA to RGB if necessary
         if image.mode == 'RGBA':
             image = image.convert('RGB')
             
@@ -638,26 +590,18 @@ def base64_to_image(base64_string):
         raise Exception(f"Error converting base64 to image: {str(e)}")
 
 def check_face_quality(image):
-    # Convert PIL Image to numpy array
     image_np = np.array(image)
     
-    # Convert to grayscale if needed
     if len(image_np.shape) == 3:
         gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
     else:
         gray = image_np
     
-    # Calculate brightness
     brightness = np.mean(gray)
-    
-    # Calculate contrast
     contrast = np.std(gray)
-    
-    # Calculate sharpness using Laplacian variance
     laplacian = cv2.Laplacian(gray, cv2.CV_64F)
     sharpness = np.var(laplacian)
     
-    # Define thresholds
     BRIGHTNESS_THRESHOLD = 40
     CONTRAST_THRESHOLD = 20
     SHARPNESS_THRESHOLD = 100
@@ -673,13 +617,9 @@ def check_face_quality(image):
 
 # Initialize models at startup
 try:
-    # Initialize only the Facenet model for faster startup and lower memory usage
     DeepFace.build_model("Facenet")
-    
-    # Initialize face detector with minimal settings
-    detector_backend = 'skip'  # Skip face detection for initialization
-    DeepFace.extract_faces(img_path = np.zeros([16, 16, 3]), target_size = (16, 16), detector_backend = detector_backend)
-    
+    detector_backend = 'skip'
+    DeepFace.extract_faces(img_path=np.zeros([16, 16, 3]), target_size=(16, 16), detector_backend=detector_backend)
     logging.info("Models initialized successfully at startup")
 except Exception as e:
     logging.error(f"Error initializing models: {str(e)}")
@@ -687,7 +627,6 @@ except Exception as e:
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
-    # Initialize models at startup
     try:
         if not initialize_models():
             logger.error("Failed to initialize models at startup")
@@ -698,9 +637,8 @@ if __name__ == '__main__':
         logger.error(f"Error during model initialization: {str(e)}")
         models_initialized = False
 
-    # Get port from environment variable (Render will set this)
     port = int(os.environ.get('PORT', 10000))
-    host = '0.0.0.0'  # Important for Docker - listen on all interfaces
+    host = '0.0.0.0'
     
     logger.info(f"Starting server on {host}:{port}...")
     logger.info(f"Environment variables:")
@@ -708,7 +646,6 @@ if __name__ == '__main__':
     logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
     logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
     
-    # Run the server with production settings
     app.run(
         host=host,
         port=port,
@@ -717,15 +654,18 @@ if __name__ == '__main__':
         use_reloader=False
     )
 
+# =======================
+# Modified endpoint below
+# =======================
+
 @app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
+@cross_origin(origins="*")  # <-- Added cross_origin decorator here
 @process_request
 def upload_photo():
     try:
-        # Handle OPTIONS request
         if request.method == 'OPTIONS':
             return jsonify({'status': 'ok'}), 200
 
-        # Check content type
         if request.content_type != 'application/json':
             return jsonify({
                 'success': False,
@@ -739,10 +679,8 @@ def upload_photo():
                 'message': 'No image data received'
             }), 400
 
-        # Convert image to base64 for Cloudinary
         image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
         
-        # Upload to Cloudinary
         cloudinary_response = requests.post(
             f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
             files={'file': f'data:image/jpeg;base64,{image_data}'},
