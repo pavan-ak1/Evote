@@ -58,28 +58,12 @@ app = Flask(__name__)
 # Configure CORS with specific origins
 CORS(app, resources={
     r"/*": {
-        "origins": [
-            "http://localhost:3000",
-            "https://voter-verify-26-new.onrender.com",
-            "https://voter-verify-face-ofgu.onrender.com",
-            "https://voter-verify-backend-ry3f.onrender.com"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-        "expose_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True,
-        "max_age": 3600
+        "origins": ["https://voter-verify-backend-ry3f.onrender.com"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept"],
+        "supports_credentials": True
     }
 })
-
-# Add global error handler for CORS
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
 
 # Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-backend-ry3f.onrender.com')
@@ -722,25 +706,6 @@ if __name__ == '__main__':
         threaded=True,
         use_reloader=False
     )
-
-# Add OPTIONS handler for preflight requests
-@app.route('/api/register', methods=['OPTIONS'])
-def handle_options():
-    response = jsonify({'status': 'ok'})
-    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
-
-@app.route('/api/verify', methods=['OPTIONS'])
-def handle_verify_options():
-    response = jsonify({'status': 'ok'})
-    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
 
 @app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
 @process_request
