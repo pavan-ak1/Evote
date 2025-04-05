@@ -58,16 +58,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (response.ok) {
                     const data = await response.json();
-                    chatBox.innerHTML += `<div class="bot-message">${escapeHtml(data.message)}</div>`;
+                    if (data.success && data.reply) {
+                        chatBox.innerHTML += `<div class="bot-message">${escapeHtml(data.reply)}</div>`;
+                    } else {
+                        throw new Error(data.error || "Invalid response from server");
+                    }
                 } else {
-                    chatBox.innerHTML += `<div class="bot-message error">Sorry, I couldn't process your request. Please try again.</div>`;
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || "Failed to get response from chatbot");
                 }
 
                 // Scroll to bottom
                 chatBox.scrollTop = chatBox.scrollHeight;
             } catch (error) {
                 console.error("Chatbot error:", error);
-                chatBox.innerHTML += `<div class="bot-message error">Sorry, something went wrong. Please try again later.</div>`;
+                chatBox.innerHTML += `<div class="bot-message error">${escapeHtml(error.message || "Sorry, something went wrong. Please try again later.")}</div>`;
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
         };
@@ -99,14 +104,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 alert('Speech recognition is not supported in your browser.');
             };
         }
-    }
 
-    function escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
     }
 });

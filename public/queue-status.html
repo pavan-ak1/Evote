@@ -136,32 +136,88 @@
 <script src="js/header-functionality.js"></script>
   <script>
     async function fetchQueueStatus(slotId) {
-  try {
-    const token = localStorage.getItem("token");
-    const response = await fetch(`/api/timeslots/queue/${slotId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
 
-    if (!response.ok) throw new Error("Failed to fetch queue status.");
-    const queueData = await response.json();
-    displayQueueStatus(queueData);
-  } catch (error) {
-    console.error("Error fetching queue status:", error);
-    document.getElementById("queue-container").innerHTML = "<p style='color: red;'>Error fetching queue status.</p>";
-  }
-}
+        const response = await fetch(`/api/slots/queue/${slotId}`, {
+          headers: { 
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
 
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch queue status");
+        }
+
+        const queueData = await response.json();
+        displayQueueStatus(queueData);
+      } catch (error) {
+        console.error("Error fetching queue status:", error);
+        const container = document.getElementById("queue-status-container");
+        container.innerHTML = `
+          <div class="text-red-500 p-4">
+            <p>Error: ${error.message}</p>
+            <p>Please check your slot ID and try again.</p>
+          </div>
+        `;
+      }
+    }
 
     function displayQueueStatus(queueData) {
       const container = document.getElementById("queue-status-container");
+      const userId = localStorage.getItem("userId");
+      
       container.innerHTML = `
-        <div class="queue-status">
-          <h3>Queue Status for Slot ${queueData.slotId}</h3>
-          <p>Start Time: ${queueData.startTime}</p>
-          <p>Booked Count: ${queueData.bookedCount}</p>
-          <p>Current Token: ${queueData.currentToken}</p>
+        <div class="space-y-4">
+          <h3 class="text-xl font-bold">Queue Status for Slot</h3>
           
-          <p>Estimated Wait: ${queueData.estimatedWait}</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded shadow">
+              <p class="font-semibold">Time Slot</p>
+              <p>${queueData.startTime}</p>
+            </div>
+            
+            <div class="bg-white p-4 rounded shadow">
+              <p class="font-semibold">Total Booked</p>
+              <p>${queueData.bookedCount}</p>
+            </div>
+            
+            <div class="bg-white p-4 rounded shadow">
+              <p class="font-semibold">Current Token</p>
+              <p>${queueData.currentToken}</p>
+            </div>
+            
+            <div class="bg-white p-4 rounded shadow">
+              <p class="font-semibold">Estimated Wait</p>
+              <p>${queueData.estimatedWait}</p>
+            </div>
+          </div>
+          
+          ${queueData.currentVoter === userId ? `
+            <div class="bg-green-100 p-4 rounded">
+              <p class="font-semibold">Your Turn</p>
+              <p>It's your turn to vote! Please proceed to the voting booth.</p>
+            </div>
+          ` : queueData.nextVoter === userId ? `
+            <div class="bg-yellow-100 p-4 rounded">
+              <p class="font-semibold">Next in Line</p>
+              <p>You are next in line. Please be ready.</p>
+            </div>
+          ` : `
+            <div class="bg-blue-100 p-4 rounded">
+              <p class="font-semibold">Queue Information</p>
+              <p>Please wait for your turn. The estimated wait time is ${queueData.estimatedWait}.</p>
+            </div>
+          `}
         </div>
       `;
     }
@@ -177,6 +233,13 @@
 
     document.getElementById("back-to-slots").addEventListener("click", () => {
       window.location.href = "/time-slot.html";
+    });
+
+    // Add paste functionality to the input field
+    document.getElementById("slot-id-input").addEventListener("paste", (e) => {
+      e.preventDefault();
+      const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+      document.getElementById("slot-id-input").value = text;
     });
   </script>
 </body>

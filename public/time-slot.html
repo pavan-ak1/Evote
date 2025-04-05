@@ -35,107 +35,159 @@
   <script src="js/header-functionality.js"></script>
   <script>
     // Global variables
-let bookedSlots = [];
+    let bookedSlots = [];
 
-// Retrieve stored values from localStorage (make sure your login saves these)
-const voterId = localStorage.getItem("voterId");
-const phoneNumber = localStorage.getItem("phoneNumber");
+    // Retrieve stored values from localStorage
+    const voterId = localStorage.getItem("voterId");
+    const phoneNumber = localStorage.getItem("phoneNumber");
 
-// If these are not set, you might need to redirect the user to log in again
-// if (!voterId || !phoneNumber) {
-//   alert("User details missing. Please log in.");
-//   window.location.href = "/login.html";
-// }
+    // Set default date to today
+    const slotDateInput = document.getElementById("slot-date");
+    const today = new Date().toISOString().split("T")[0];
+    slotDateInput.value = today;
 
-// Set default date to today (YYYY-MM-DD)
-const slotDateInput = document.getElementById("slot-date");
-const today = new Date().toISOString().split("T")[0];
-slotDateInput.value = today;
+    /***********************************
+     * FETCH BOOKED SLOTS
+     ***********************************/
+    async function fetchBookedSlots() {
+      const bookedContainer = document.getElementById("booked-slots-container");
+      bookedContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading booked slots...</p>`;
+      
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
 
-/***********************************
- * FETCH AVAILABLE TIME SLOTS
- ***********************************/
-async function fetchSlots(date) {
-  const slotsContainer = document.getElementById("slots-container");
-  slotsContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading slots...</p>`;
-  try {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login.html";
-      return;
-    }
-
-        const response = await fetch(`https://voter-verify-backend.onrender.com/api/slots/available?date=${date}`, {
+        const response = await fetch("/api/slots/booked", {
           headers: {
             "Authorization": `Bearer ${token}`
           }
         });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        window.location.href = "/login.html";
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch booked slots");
+        }
+
+        const data = await response.json();
+        bookedSlots = data;
+        updateBookedSlotsDisplay();
+      } catch (error) {
+        console.error("Error fetching booked slots:", error);
+        bookedContainer.innerHTML = `<p class="text-red-500">Error fetching booked slots: ${error.message}</p>`;
+      }
+    }
+
+    /***********************************
+     * UPDATE BOOKED SLOTS DISPLAY
+     ***********************************/
+    function updateBookedSlotsDisplay() {
+      const bookedContainer = document.getElementById("booked-slots-container");
+      if (!bookedSlots || bookedSlots.length === 0) {
+        bookedContainer.innerHTML = "<p class='text-center py-2'>You have no booked slots.</p>";
         return;
       }
-      throw new Error("Failed to fetch time slots.");
+
+      bookedContainer.innerHTML = "<h3 class='font-bold text-lg mb-3'>Your Booked Slots:</h3>";
+      bookedSlots.forEach(slot => {
+        const slotDiv = document.createElement("div");
+        slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center bg-blue-100";
+        slotDiv.innerHTML = `
+          <div>
+            <strong>Date:</strong> ${slot.date}<br>
+            <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
+            <strong>Status:</strong> Confirmed
+          </div>
+          <div>
+            <button class="bg-blue-600 hover:bg-blue-800 text-white py-2 px-3 rounded" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
+          </div>
+        `;
+        bookedContainer.appendChild(slotDiv);
+      });
     }
 
-    const slots = await response.json();
-    console.log("Fetched slots:", slots);
-    displaySlots(slots);
-  } catch (error) {
-    console.error("Error fetching slots:", error);
-    slotsContainer.innerHTML = "<p class='text-red-500'>Error fetching time slots.</p>";
-  }
-}
-
-/***********************************
- * DISPLAY AVAILABLE SLOTS
- ***********************************/
-function displaySlots(slots) {
-  const slotsContainer = document.getElementById("slots-container");
-  slotsContainer.innerHTML = "";
-  if (!slots.length) {
-    slotsContainer.innerHTML = "<p class='text-center py-3'>No slots available for this date.</p>";
-    return;
-  }
-  slots.forEach(slot => {
-    const slotDiv = document.createElement("div");
-    // Apply Tailwind classes instead of custom classes
-    slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center";
-    
-    // Add status class
-    if (slot.bookedVoters.length >= slot.maxCapacity) {
-      slotDiv.classList.add("bg-red-100", "text-red-800"); // Booked
-    } else {
-      slotDiv.classList.add("bg-green-100", "text-green-800"); // Available
+    /***********************************
+     * COPY SLOT ID FUNCTION
+     ***********************************/
+    function copySlotID(slotId) {
+      navigator.clipboard.writeText(slotId)
+        .then(() => {
+          const successMessage = document.getElementById('success-message');
+          successMessage.textContent = `Slot ID copied: ${slotId}`;
+          successMessage.style.display = 'block';
+          successMessage.style.opacity = '1';
+          
+          // Hide the message after 3 seconds
+          setTimeout(() => {
+            successMessage.style.opacity = '0';
+            setTimeout(() => {
+              successMessage.style.display = 'none';
+            }, 300);
+          }, 3000);
+        })
+        .catch(err => console.error("Failed to copy:", err));
     }
 
-    // Build the HTML for each slot
-    slotDiv.innerHTML = `
-      <div>
-        <strong>${slot.startTime} - ${slot.endTime}</strong><br>
-        Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}
-      </div>
-      <div>
-        <button class="${slot.bookedVoters.length >= slot.maxCapacity 
-          ? 'bg-gray-400 cursor-not-allowed' 
-          : 'bg-blue-600 hover:bg-blue-800'} text-white py-2 px-3 rounded" 
-          data-slot-id="${slot._id}" ${
-          slot.bookedVoters.length >= slot.maxCapacity ? "disabled" : ""
-        }>
-          ${slot.bookedVoters.length >= slot.maxCapacity ? "Slot Full" : "Book Slot"}
-        </button>
-      </div>
-    `;
-    slotsContainer.appendChild(slotDiv);
-  });
+    /***********************************
+     * FETCH AVAILABLE TIME SLOTS
+     ***********************************/
+    async function fetchSlots(date) {
+      const slotsContainer = document.getElementById("slots-container");
+      slotsContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading slots...</p>`;
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.href = "/login.html";
+          return;
+        }
 
-  // Attach event listeners to all non-disabled "Book Slot" buttons
-  document.querySelectorAll("button[data-slot-id]:not([disabled])").forEach(button => {
-    button.addEventListener("click", bookSlot);
-  });
-}
-        // Build the HTML for each slot
+        const response = await fetch(`/api/slots/available?date=${date}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            window.location.href = "/login.html";
+            return;
+          }
+          throw new Error("Failed to fetch time slots.");
+        }
+
+        const slots = await response.json();
+        displaySlots(slots);
+      } catch (error) {
+        console.error("Error fetching slots:", error);
+        slotsContainer.innerHTML = "<p class='text-red-500'>Error fetching time slots.</p>";
+      }
+    }
+
+    /***********************************
+     * DISPLAY AVAILABLE SLOTS
+     ***********************************/
+    function displaySlots(slots) {
+      const slotsContainer = document.getElementById("slots-container");
+      slotsContainer.innerHTML = "";
+      if (!slots.length) {
+        slotsContainer.innerHTML = "<p class='text-center py-3'>No slots available for this date.</p>";
+        return;
+      }
+      slots.forEach(slot => {
+        const slotDiv = document.createElement("div");
+        slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center";
+        
+        if (slot.bookedVoters.length >= slot.maxCapacity) {
+          slotDiv.classList.add("bg-red-100", "text-red-800");
+        } else {
+          slotDiv.classList.add("bg-green-100", "text-green-800");
+        }
+
         slotDiv.innerHTML = `
           <div>
             <strong>${slot.startTime} - ${slot.endTime}</strong><br>
@@ -154,227 +206,86 @@ function displaySlots(slots) {
       });
     }
 
-/***********************************
- * BOOK A TIME SLOT
- ***********************************/
-async function bookSlot(event) {
-  const button = event.target;
-  const slotId = button.getAttribute("data-slot-id");
-  button.disabled = true;
-  button.innerText = "Booking...";
-  button.classList.add("bg-gray-400");
-  button.classList.remove("bg-blue-600", "hover:bg-blue-800");
     /***********************************
      * BOOK A TIME SLOT
      ***********************************/
     async function bookSlot(slotId) {
-      if (!slotId) {
-        showMessage('Slot ID is required', 'error');
-        return;
+      const button = document.querySelector(`button[onclick="bookSlot('${slotId}')"]`);
+      if (button) {
+        button.disabled = true;
+        button.innerText = "Booking...";
+        button.classList.add("bg-gray-400");
+        button.classList.remove("bg-blue-600", "hover:bg-blue-800");
       }
 
-  try {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login.html";
-      return;
-    }
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error("Please login to book a slot");
+        }
 
-    const response = await fetch("/api/slots/book", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ slotId })
-    });
-        const response = await fetch("https://voter-verify-backend.onrender.com/api/slots/book", {
+        const response = await fetch("/api/slots/book", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ slotId })
+          body: JSON.stringify({ slotId }),
         });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        window.location.href = "/login.html";
-        return;
-      }
-      const data = await response.json();
-      throw new Error(data.error || "Failed to book slot");
-    }
-
-    const data = await response.json();
-    alert("Slot booked successfully!");
-    await fetchBookedSlots();
-    await fetchSlots(slotDateInput.value);
-  } catch (error) {
-    console.error("Error booking slot:", error);
-    if (error.message.includes("Authentication failed")) {
-      window.location.href = "/login.html";
-    } else {
-      alert(error.message);
-    }
-    button.disabled = false;
-    button.innerText = "Book Slot";
-    button.classList.remove("bg-gray-400");
-    button.classList.add("bg-blue-600", "hover:bg-blue-800");
-  }
-}
         const data = await response.json();
-        showMessage("Slot booked successfully!", "success");
-        fetchSlots(document.getElementById("slot-date").value); // Refresh the slots list
-        
+
+        if (response.ok) {
+          alert("Slot booked successfully!");
+          window.location.reload();
+        } else {
+          // Handle specific error messages from the backend
+          if (data.error) {
+            throw new Error(data.error);
+          } else {
+            throw new Error(data.message || "Failed to book slot");
+          }
+        }
       } catch (error) {
-        console.error("Error booking slot:", error);
-        showMessage(error.message || "Failed to book slot", "error");
+        console.error("Booking error:", error);
+        // Show more specific error messages
+        if (error.message.includes("already booked")) {
+          alert("You have already booked a time slot. Please cancel your existing booking before booking a new one.");
+        } else if (error.message.includes("already full")) {
+          alert("This time slot is already full. Please select another slot.");
+        } else if (error.message.includes("not found")) {
+          alert("The selected time slot is no longer available. Please refresh the page and try again.");
+        } else {
+          alert(error.message || "Failed to book slot. Please try again.");
+        }
+        
+        if (button) {
+          button.disabled = false;
+          button.innerText = "Book Slot";
+          button.classList.remove("bg-gray-400");
+          button.classList.add("bg-blue-600", "hover:bg-blue-800");
+        }
       }
     }
 
-/***********************************
- * UPDATE BOOKED SLOTS DISPLAY
- ***********************************/
-function updateBookedSlotsDisplay() {
-  const bookedContainer = document.getElementById("booked-slots-container");
-  if (!bookedSlots || bookedSlots.length === 0) {
-    bookedContainer.innerHTML = "<p class='text-center py-2'>You have no booked slots.</p>";
-    return;
-  }
-
-  bookedContainer.innerHTML = "<h3 class='font-bold text-lg mb-3'>Your Booked Slots:</h3>";
-  bookedSlots.forEach(slot => {
-    const slotDiv = document.createElement("div");
-    slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center bg-red-100 text-red-800";
-    slotDiv.innerHTML = `
-      <div>
-        <strong>Date:</strong> ${slot.date}<br>
-        <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
-        <strong>Status:</strong> Confirmed
-      </div>
-      <div>
-        <button class="bg-blue-600 hover:bg-blue-800 text-white py-2 px-3 rounded" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
-      </div>
-    `;
-    bookedContainer.appendChild(slotDiv);
-  });
-}
-
-/***********************************
- * FETCH BOOKED SLOTS FOR THE VOTER
- ***********************************/
-async function fetchBookedSlots() {
-  const bookedContainer = document.getElementById("booked-slots-container");
-  bookedContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading booked slots...</p>`;
-  try {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login.html";
-      return;
-    }
-
-    const response = await fetch("/api/slots/booked", {
-      headers: {
-        "Authorization": `Bearer ${token}`
-      }
+    /***********************************
+     * EVENT LISTENERS
+     ***********************************/
+    document.getElementById("fetch-slots").addEventListener("click", () => {
+      fetchSlots(slotDateInput.value);
     });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        window.location.href = "/login.html";
-        return;
-      }
-      throw new Error("Failed to fetch booked slots");
-    }
-
-    const data = await response.json();
-    bookedSlots = data;
-    updateBookedSlotsDisplay();
-  } catch (error) {
-    console.error("Error fetching booked slots:", error);
-    if (error.message.includes("Authentication failed")) {
-      window.location.href = "/login.html";
-    }
-  }
-}
-
-/***********************************
- * COPY SLOT ID FUNCTION
- ***********************************/
-function copySlotID(slotId) {
-  navigator.clipboard
-    .writeText(slotId)
-    .then(() => {
-      const successMessage = document.getElementById('success-message');
-      successMessage.textContent = `Slot ID copied: ${slotId}`;
-      successMessage.style.display = 'block';
-      successMessage.style.opacity = '1';
-      
-      // Hide the message after 3 seconds
-      setTimeout(() => {
-        successMessage.style.opacity = '0';
-        setTimeout(() => {
-          successMessage.style.display = 'none';
-        }, 300);
-      }, 3000);
-    })
-    .catch(err => console.error("Failed to copy:", err));
-}
-
-/***********************************
- * NAVIGATE TO QUEUE STATUS PAGE
- ***********************************/
-document.getElementById("view-queue-status").addEventListener("click", () => {
-  window.location.href = "/queue-status.html";
-});
-
-/***********************************
- * INITIALIZE EVENT LISTENERS ON LOAD
- ***********************************/
-document.addEventListener("DOMContentLoaded", () => {
-  // Check authentication first
-  const token = localStorage.getItem("token");
-  if (!token) {
-    alert("Please log in to access time slot booking");
-    window.location.href = "/login.html";
-    return;
-  }
-
-  // Set default date to today (YYYY-MM-DD)
-  const slotDateInput = document.getElementById("slot-date");
-  const today = new Date().toISOString().split("T")[0];
-  slotDateInput.value = today;
-
-  // Fetch initial data
-  fetchSlots(today);
-  fetchBookedSlots();
-
-  // Add event listeners
-  document.getElementById("fetch-slots").addEventListener("click", () => {
-    fetchSlots(slotDateInput.value);
-  });
-
-  document.getElementById("back-dashboard").addEventListener("click", () => {
-    window.location.href = "/dashboard.html";
-  });
-});
-      document.getElementById("back-dashboard").addEventListener("click", () => {
-        window.location.href = "/dashboard.html";
-      });
+    document.getElementById("back-dashboard").addEventListener("click", () => {
+      window.location.href = "/dashboard.html";
     });
 
-    function showMessage(message, type) {
-      const successMessage = document.getElementById("success-message");
-      successMessage.textContent = message;
-      successMessage.style.display = "block";
-      successMessage.style.backgroundColor = type === "success" ? "#28a745" : "#dc3545";
-      
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        successMessage.style.display = "none";
-      }, 5000);
-    }
+    document.getElementById("view-queue-status").addEventListener("click", () => {
+      window.location.href = "/queue-status.html";
+    });
+
+    // Initial fetch
+    fetchSlots(today);
+    fetchBookedSlots();
   </script>
 </body>
 </html>

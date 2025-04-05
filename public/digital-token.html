@@ -137,16 +137,18 @@
   <script>
     // Helper function to display error messages
     function showError(message) {
-      document.getElementById("loading-container").classList.add("d-none");
-      document.getElementById("error-container").classList.remove("d-none");
+      document.getElementById("loading-container").classList.add("hidden");
+      document.getElementById("error-container").classList.remove("hidden");
       document.getElementById("error-message").textContent = message || "An error occurred. Please try again.";
     }
 
     // Helper function to display the QR code
     function showQRCode(qrCodeUrl, userData) {
-      document.getElementById("loading-container").classList.add("d-none");
-      document.getElementById("error-container").classList.add("d-none");
-      document.getElementById("qr-container").classList.remove("d-none");
+      document.getElementById("loading-container").classList.add("hidden");
+      document.getElementById("error-container").classList.add("hidden");
+      document.getElementById("qr-container").classList.remove("hidden");
+      document.getElementById("voter-details").classList.remove("hidden");
+      document.getElementById("download-btn").classList.remove("hidden");
       
       // Set QR code image
       const qrImg = document.getElementById("qr-code");
@@ -212,9 +214,11 @@
       
       try {
         // Show loading spinner
-        document.getElementById("loading-container").classList.remove("d-none");
-        document.getElementById("error-container").classList.add("d-none");
-        document.getElementById("qr-container").classList.add("d-none");
+        document.getElementById("loading-container").classList.remove("hidden");
+        document.getElementById("error-container").classList.add("hidden");
+        document.getElementById("qr-container").classList.add("hidden");
+        document.getElementById("voter-details").classList.add("hidden");
+        document.getElementById("download-btn").classList.add("hidden");
         
         // Fetch user data first
         const userResponse = await fetch("/api/user/profile", {
@@ -271,7 +275,7 @@
         downloadBtn.disabled = true;
         downloadBtn.textContent = "Generating PDF...";
         
-        const response = await fetch("/api/tokens/download", {
+        const response = await fetch("/api/digital-token/download", {
           method: "GET",
           headers: { 
             "Authorization": `Bearer ${token}` 
@@ -279,11 +283,17 @@
         });
         
         if (!response.ok) {
-          throw new Error("Failed to download PDF");
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to generate PDF");
         }
         
-        // Convert response to blob
+        // Get the blob from the response
         const blob = await response.blob();
+        
+        // Check if the blob is a valid PDF
+        if (blob.type !== 'application/pdf') {
+          throw new Error("Invalid PDF file received");
+        }
         
         // Create a temporary link and trigger download
         const url = window.URL.createObjectURL(blob);
@@ -299,10 +309,14 @@
         
         // Reset button
         downloadBtn.disabled = false;
-        downloadBtn.innerHTML = '<i class="bi bi-download"></i> Download PDF';
+        downloadBtn.textContent = "Download PDF";
       } catch (error) {
         console.error("Error downloading PDF:", error);
-        showError("Failed to download PDF. Please try again.");
+        showError(error.message || "Failed to download PDF. Please try again.");
+        // Reset button
+        const downloadBtn = document.getElementById("download-btn");
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = "Download PDF";
       }
     }
 
