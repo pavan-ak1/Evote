@@ -77,18 +77,23 @@ class FaceVerificationService {
                 }
 
                 // Register face with Python service
-                const response = await axios.post(`${this.baseURL}/register`, {
-                    userId,
-                    faceImage: processedImage
+                const response = await axios.post(`${this.baseURL}/api/register`, {
+                    user_id: userId,
+                    face_image: processedImage.split(',')[1] // Remove data:image/jpeg;base64, prefix
                 }, {
                     timeout: 30000,
+                    withCredentials: true,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
                     }
                 });
 
                 if (!response.data || !response.data.success) {
-                    throw new Error(response.data?.message || 'Face registration failed');
+                    throw new Error(response.data?.message || response.data?.error || 'Face registration failed');
                 }
 
                 // Upload to Cloudinary for storage
@@ -172,13 +177,18 @@ class FaceVerificationService {
                     processedImage2 = `data:image/jpeg;base64,${processedImage2}`;
                 }
 
-                const response = await axios.post(`${this.baseURL}/verify`, {
-                    image1: processedImage1,
-                    image2: processedImage2
+                const response = await axios.post(`${this.baseURL}/api/verify`, {
+                    face_image: processedImage1.split(',')[1], // Remove data:image/jpeg;base64, prefix
+                    registered_image: processedImage2.split(',')[1], // Remove data:image/jpeg;base64, prefix
                 }, {
                     timeout: 30000,
+                    withCredentials: true,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
                     }
                 });
 

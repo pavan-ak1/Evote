@@ -55,7 +55,15 @@ if not os.path.exists(temp_dir):
     logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000", "https://voter-verify-backend-ry3f.onrender.com", "https://voter-verify-face-ofgu.onrender.com"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": True,
+        "max_age": 3600
+    }
+})
 
 # Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')

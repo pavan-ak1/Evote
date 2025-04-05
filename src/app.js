@@ -20,10 +20,12 @@ const app = express();
 
 // CORS configuration
 app.use(cors({
-  origin: ['https://voter-verify-backend-ry3f.onrender.com', 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  origin: ['https://voter-verify-backend-ry3f.onrender.com', 'http://localhost:3000', 'https://voter-verify-face-ofgu.onrender.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 // Middleware

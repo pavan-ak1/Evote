@@ -64,25 +64,38 @@ document.addEventListener("DOMContentLoaded", () => {
             const imageData = canvas.toDataURL("image/jpeg");
             
             // Send to backend for verification
-            const response = await fetch("https://voter-verify-face-ofgu.onrender.com/voter/face/verify", {
+            const response = await fetch("https://voter-verify-face-ofgu.onrender.com/api/verify", {
                 method: "POST",
+                mode: 'cors',
+                credentials: 'include',
                 headers: {
                     'Authorization': 'Bearer ' + token,
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
                 },
                 body: JSON.stringify({
-                    image: imageData,
-                    userId: userId
+                    face_image: imageData.split(',')[1], // Remove data:image/jpeg;base64, prefix
+                    user_id: userId
                 })
             });
             
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || "Server error");
+            // Handle CORS errors
+            if (response.status === 0) {
+                throw new Error('CORS error: Unable to connect to face verification service. Please try again.');
+            }
+            
+            if (response.status === 500) {
+                throw new Error('Server error: Face verification service is temporarily unavailable. Please try again later.');
             }
             
             const responseData = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(responseData.message || responseData.error || "Face verification failed");
+            }
             
             // Display result
             if (result) {
