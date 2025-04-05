@@ -224,7 +224,7 @@
         const token = localStorage.getItem("token");
         if (!token) {
           alert("Unauthorized! Please log in.");
-          window.location.href = "/login.html";
+          window.location.href = "login.html";
           return;
         }
 
@@ -255,7 +255,7 @@
         document.getElementById("logout").addEventListener("click", () => {
           localStorage.removeItem("token"); // Clear token
           alert("Logged out successfully!");
-          window.location.href = "/login.html";
+          window.location.href = "login.html";
         });
       });
     </script>

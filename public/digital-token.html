@@ -143,12 +143,28 @@
     }
 
     // Helper function to display the QR code
-    function showQRCode(qrCodeUrl, userData) {
+    function showQRCode(tokenData, userData) {
       document.getElementById("loading-container").classList.add("hidden");
       document.getElementById("error-container").classList.add("hidden");
       document.getElementById("qr-container").classList.remove("hidden");
       document.getElementById("voter-details").classList.remove("hidden");
       document.getElementById("download-btn").classList.remove("hidden");
+      
+      // Generate QR code from token data
+      const qrData = {
+        token: tokenData.token,
+        userId: userData._id,
+        voterId: userData.voterId,
+        name: userData.name,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Convert data to string and encode it
+      const qrString = JSON.stringify(qrData);
+      const encodedData = encodeURIComponent(qrString);
+      
+      // Create QR code URL using a QR code generator service
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodedData}`;
       
       // Set QR code image
       const qrImg = document.getElementById("qr-code");
@@ -212,67 +228,94 @@
     }
 
     async function generateToken() {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        showError("You are not logged in. Please log in first.");
-        setTimeout(() => {
-          window.location.href = "/login.html";
-        }, 2000);
-        return;
-      }
-      
       try {
-        // Show loading spinner
-        document.getElementById("loading-container").classList.remove("hidden");
-        document.getElementById("error-container").classList.add("hidden");
-        document.getElementById("qr-container").classList.add("hidden");
-        document.getElementById("voter-details").classList.add("hidden");
-        document.getElementById("download-btn").classList.add("hidden");
-        
-        // Fetch user data first
-        const userResponse = await fetch("/api/user/profile", {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
-        
-        if (!userResponse.ok) {
-          throw new Error("Failed to fetch user profile");
+        const token = localStorage.getItem('token');
+        if (!token) {
+          showError('Please log in to generate a token');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          return;
         }
-        
-        const userData = await userResponse.json();
-        
-        // Generate token
-        const response = await fetch("/api/digital-token/generate", {
-          method: "POST",
+
+        // Show loading state
+        document.getElementById('loading-container').classList.remove('hidden');
+        document.getElementById('error-container').classList.add('hidden');
+        document.getElementById('qr-container').classList.add('hidden');
+        document.getElementById('voter-details').classList.add('hidden');
+        document.getElementById('download-btn').classList.add('hidden');
+
+        // Fetch user profile
+        const response = await fetch('https://voter-verify-backend.onrender.com/api/user/profile', {
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
-        
+
+        console.log('Profile response status:', response.status);
+
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          showError('Session expired. Please log in again.');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          return;
+        }
+
         if (!response.ok) {
           const errorData = await response.json();
-          if (errorData.redirect) {
-            // If we need to redirect to time slot booking
-            showError(errorData.error);
-            setTimeout(() => {
-              window.location.href = errorData.redirect;
-            }, 2000);
-            return;
-          }
-          throw new Error(errorData.error || "Failed to generate digital token");
+          throw new Error(errorData.message || 'Failed to fetch user profile');
         }
+
+        const userData = await response.json();
+        console.log('User profile data:', userData);
+
+        // Generate digital token
+        const tokenResponse = await fetch('https://voter-verify-backend.onrender.com/api/digital-token/generate', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            userId: userData._id,
+            voterId: userData.voterId,
+            name: userData.name,
+            phoneNumber: userData.phoneNumber
+          })
+        });
+
+        console.log('Token generation response status:', tokenResponse.status);
+
+        if (tokenResponse.status === 401) {
+          localStorage.removeItem('token');
+          showError('Session expired. Please log in again.');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          return;
+        }
+
+        if (!tokenResponse.ok) {
+          const errorData = await tokenResponse.json();
+          throw new Error(errorData.message || 'Failed to generate token');
+        }
+
+        const tokenData = await tokenResponse.json();
+        console.log('Generated token data:', tokenData);
+
+        // Display QR code and user info
+        showQRCode(tokenData, userData);
         
-        const result = await response.json();
-        if (result.qrCodeUrl) {
-          showQRCode(result.qrCodeUrl, userData);
-        } else {
-          throw new Error("No QR code URL in response");
-        }
       } catch (error) {
-        console.error("Error generating token:", error);
-        showError(error.message || "Failed to generate digital token");
+        console.error('Error generating token:', error);
+        showError(error.message);
+      } finally {
+        document.getElementById('loading-container').classList.add('hidden');
       }
     }
 
@@ -281,7 +324,7 @@
       if (!token) {
         showError("You are not logged in. Please log in first.");
         setTimeout(() => {
-          window.location.href = "/login.html";
+          window.location.href = "login.html";
         }, 2000);
         return;
       }
@@ -292,12 +335,23 @@
         downloadBtn.disabled = true;
         downloadBtn.textContent = "Generating PDF...";
         
-        const response = await fetch("/api/digital-token/download", {
+        const response = await fetch("https://voter-verify-backend.onrender.com/api/digital-token/download", {
           method: "GET",
           headers: { 
-            "Authorization": `Bearer ${token}` 
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
           }
         });
+        
+        if (response.status === 401) {
+          localStorage.removeItem("token");
+          showError("Session expired. Please log in again.");
+          setTimeout(() => {
+            window.location.href = "login.html";
+          }, 2000);
+          return;
+        }
         
         if (!response.ok) {
           const errorData = await response.json();

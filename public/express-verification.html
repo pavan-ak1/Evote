@@ -189,18 +189,40 @@
         console.log('Image captured, length:', imageData.length);
         console.log('User ID:', userId);
 
+        // Check token before making request
+        const currentToken = localStorage.getItem('token');
+        if (!currentToken) {
+          showStatus('Session expired. Please log in again.', 'error');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          return;
+        }
+
         // Register the face
-        const response = await fetch('/voter/face/register', {
+        const response = await fetch('https://voter-verify-backend.onrender.com/voter/face/register', {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': `Bearer ${token}` 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+            'Accept': 'application/json'
           },
           body: JSON.stringify({ 
             faceImage: imageData,
             userId: userId 
           })
         });
+
+        console.log('Registration response status:', response.status);
+
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          showStatus('Session expired. Please log in again.', 'error');
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+          return;
+        }
 
         const data = await response.json();
 
@@ -210,16 +232,9 @@
 
         showStatus('Face registered successfully!', 'success');
         
-        // Verify token is still valid before redirecting
-        const currentToken = localStorage.getItem('token');
-        if (!currentToken) {
-          showStatus('Session expired. Please log in again.', 'error');
-          return;
-        }
-
         // Redirect to dashboard after successful registration
         setTimeout(() => {
-          window.location.href = '/dashboard.html';
+          window.location.href = 'dashboard.html';
         }, 2000);
 
       } catch (error) {
@@ -241,18 +256,12 @@
       statusElement.className = 'status';
       
       // Add appropriate class based on type
-      switch(type) {
-        case true:
-          statusElement.classList.add('success');
-          break;
-        case false:
-          statusElement.classList.add('error');
-          break;
-        case 'info':
-          statusElement.classList.add('info');
-          break;
-        default:
-          statusElement.classList.add('info');
+      if (type === 'success') {
+        statusElement.classList.add('success');
+      } else if (type === 'error') {
+        statusElement.classList.add('error');
+      } else {
+        statusElement.classList.add('info');
       }
     }
 
