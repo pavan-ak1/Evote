@@ -743,6 +743,7 @@ def handle_verify_options():
     return response
 
 @app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
+@process_request
 def upload_photo():
     try:
         # Handle OPTIONS request
