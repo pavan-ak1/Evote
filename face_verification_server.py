@@ -184,22 +184,47 @@ def verify_face():
     try:
         manage_memory()  # Check memory before processing
         
+        # Log the incoming request
+        logger.info("Received verification request")
+        
         data = request.get_json()
-        if not data or 'faceImage' not in data:
+        if not data:
+            logger.error("No JSON data received in request")
             return jsonify({
                 'success': False,
-                'message': 'Missing required field: faceImage'
+                'message': 'No data received in request',
+                'error': 'missing_data'
+            }), 400
+            
+        if 'faceImage' not in data:
+            logger.error("faceImage field missing in request")
+            return jsonify({
+                'success': False,
+                'message': 'Missing required field: faceImage',
+                'error': 'missing_face_image'
             }), 400
 
+        # Log the size of the received image data
+        image_data = data['faceImage']
+        logger.info(f"Received image data length: {len(image_data)}")
+        
         # Process image in memory
-        image_data = data['faceImage'].split(',')[1] if ',' in data['faceImage'] else data['faceImage']
-        nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        # Convert BGR to RGB
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
         try:
+            image_data = image_data.split(',')[1] if ',' in image_data else image_data
+            nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            if img is None:
+                logger.error("Failed to decode image")
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to decode image',
+                    'error': 'image_decode_failed'
+                }), 400
+                
+            # Convert BGR to RGB
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
             # Verify face using DeepFace with optimized settings
             result = DeepFace.verify(
                 rgb_img, 
@@ -217,18 +242,26 @@ def verify_face():
                 'threshold': float(result['threshold'])
             })
         except Exception as e:
+            logger.error(f"Image processing error: {str(e)}")
             if "No face detected" in str(e):
                 return jsonify({
                     'success': False,
-                    'message': 'No face detected in the image'
+                    'message': 'No face detected in the image',
+                    'error': 'no_face_detected'
                 }), 400
-            raise e
+            return jsonify({
+                'success': False,
+                'message': f'Error processing image: {str(e)}',
+                'error': 'image_processing_error'
+            }), 400
             
     except Exception as e:
         logger.error(f"Verification error: {str(e)}")
+        logger.error(f"Request data: {str(data)}")
         return jsonify({
             'success': False,
-            'message': f'Error verifying face: {str(e)}'
+            'message': f'Error verifying face: {str(e)}',
+            'error': 'verification_error'
         }), 500
 
 @app.route('/register', methods=['POST'])
