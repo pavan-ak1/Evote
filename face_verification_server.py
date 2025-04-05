@@ -46,7 +46,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 # Create temp directory
 temp_dir = os.path.join(os.getcwd(), 'temp')
@@ -54,38 +54,24 @@ if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
     logger.info(f"Created temp directory: {temp_dir}")
 
-app = Flask(__name__)
+app = Flask(_name_)
+# Configure CORS with specific origins
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "https://voter-verify-backend-ry3f.onrender.com", "https://voter-verify-face-ofgu.onrender.com"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "origins": [
+            "http://localhost:3000",
+            "https://voter-verify-26-new.onrender.com",
+            "https://voter-verify-face-ofgu.onrender.com"
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
         "max_age": 3600
     }
 })
 
-# Add explicit OPTIONS route handlers
-@app.route('/api/register', methods=['OPTIONS'])
-def handle_register_options():
-    response = jsonify({'message': 'OK'})
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
-
-@app.route('/api/verify', methods=['OPTIONS'])
-def handle_verify_options():
-    response = jsonify({'message': 'OK'})
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
-
 # Backend API configuration with better error handling
-BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
+BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-26-new.onrender.com')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 
 # Global variables for memory management
@@ -127,7 +113,7 @@ def manage_memory():
             
             # Clear any large variables
             for var in list(globals().keys()):
-                if var.startswith('_') or var in ['__builtins__', '__file__', '__name__']:
+                if var.startswith('') or var in ['builtins', 'file', 'name_']:
                     continue
                 if isinstance(globals()[var], (np.ndarray, tf.Tensor)):
                     del globals()[var]
@@ -205,7 +191,7 @@ def process_request(func):
                 if isinstance(locals()[var], (np.ndarray, tf.Tensor)):
                     del locals()[var]
             gc.collect()
-    wrapped.__name__ = func.__name__  # Preserve the original function name
+    wrapped._name_ = func._name_  # Preserve the original function name
     return wrapped
 
 @app.route('/', methods=['GET'])
@@ -632,38 +618,43 @@ def check_face_quality(image):
 
 # Initialize models at startup
 try:
-    if not initialize_models():
-        logger.error("Failed to initialize models at startup")
-        raise Exception("Failed to initialize face verification models")
-    models_initialized = True
-    logger.info("Models initialized successfully at startup")
+    # Initialize DeepFace models
+    DeepFace.build_model("VGG-Face")
+    DeepFace.build_model("Facenet")
+    DeepFace.build_model("Facenet512")
+    DeepFace.build_model("OpenFace")
+    DeepFace.build_model("DeepFace")
+    DeepFace.build_model("DeepID")
+    DeepFace.build_model("ArcFace")
+    DeepFace.build_model("Dlib")
+    DeepFace.build_model("SFace")
+    
+    # Initialize face detector
+    detector_backend = 'opencv'
+    DeepFace.extract_faces(img_path = np.zeros([224, 224, 3]), target_size = (224, 224), detector_backend = detector_backend)
+    
+    logging.info("Models initialized successfully at startup")
 except Exception as e:
-    logger.error(f"Error during model initialization: {str(e)}")
-    models_initialized = False
+    logging.error(f"Error initializing models: {str(e)}")
+    raise
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
-    # Get port from environment variable with better error handling
-    try:
-        port = int(os.environ.get('PORT', 5001))
-        host = '0.0.0.0'
-        
-        logger.info(f"Starting server on {host}:{port}...")
-        logger.info(f"Environment variables:")
-        logger.info(f"PORT: {port}")
-        logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
-        logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
-        
-        # Force the server to bind to all interfaces
-        app.run(
-            host=host,
-            port=port,
-            debug=False,
-            threaded=True,
-            use_reloader=False
-        )
-    except Exception as e:
-        logger.error(f"Failed to start server: {str(e)}")
-        logger.error(f"PORT environment variable: {os.environ.get('PORT')}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise
+    # Get port from environment variable (Render will set this)
+    port = int(os.environ.get('PORT', 10000))
+    host = '0.0.0.0'  # Important for Docker - listen on all interfaces
+    
+    logging.info(f"Starting server on {host}:{port}...")
+    logging.info(f"Environment variables:")
+    logging.info(f"PORT: {port}")
+    logging.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
+    logging.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
+    
+    # Run the server with production settings
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        threaded=True,
+        use_reloader=False
+    )

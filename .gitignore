@@ -20,6 +20,7 @@ __pycache__/
 *.so
 .Python
 venv/
+venv310/
 env/
 ENV/
 face_recognition_env_py310_new/
