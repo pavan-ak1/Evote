@@ -42,11 +42,9 @@ const io = socketIo(server, {
 
 // Socket.io events
 io.on('connection', (socket) => {
-  console.log('New client connected, socket ID:', socket.id);
   
   // Join a room based on user ID
   socket.on('joinRoom', (roomId) => {
-    console.log(`Socket ${socket.id} joining room: ${roomId}`);
     socket.join(roomId);
     
     // Fetch previous messages for this room
@@ -64,7 +62,6 @@ io.on('connection', (socket) => {
     try {
       const { userId, room, text, sender } = messageData;
       
-      console.log(`New message in room ${room} from ${sender}: ${text}`);
       
       // Save message to database
       const newMessage = new ChatMessage({
@@ -94,9 +91,6 @@ io.on('connection', (socket) => {
 // Function to start the server
 function startServer() {
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🔗 API available at http://localhost:${PORT}/api`);
-    console.log(`📱 Frontend available at http://localhost:${PORT}`);
-    console.log(`💬 Socket.io enabled for real-time chat`);
+    console.log(` Server running on port ${PORT}`);
   });
 }

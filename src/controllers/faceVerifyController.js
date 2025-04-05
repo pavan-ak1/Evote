@@ -12,7 +12,6 @@ const faceVerification = async(req, res) => {
     // Store the face embedding in the user's document
     try {
       const userEmail = req.user.email;
-      console.log("Storing face for user:", userEmail);
       
       // Store the face image in the user document
       const user = await User.findOneAndUpdate(
@@ -29,7 +28,6 @@ const faceVerification = async(req, res) => {
         return res.status(404).json({ success: false, message: "User not found" });
       }
 
-      console.log("Face registered successfully for user:", user._id);
       return res.status(200).json({ 
         success: true, 
         message: "Face registered successfully!",

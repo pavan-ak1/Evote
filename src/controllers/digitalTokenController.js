@@ -12,7 +12,7 @@ const User = require("../models/userModel");
 exports.generateDigitalToken = async (req, res) => {
   try {
     const voterId = req.user._id.toString();
-    console.log("Generating digital token for Voter ID:", voterId);
+    
 
     // Find the user's booked slot
     const user = await User.findById(voterId).populate('timeSlot');
@@ -21,7 +21,6 @@ exports.generateDigitalToken = async (req, res) => {
     }
 
     const bookedSlot = user.timeSlot;
-    console.log("Found Booked Slot:", bookedSlot);
 
     // Prepare data for the QR code - use a consistent format with just essential data
     const qrData = JSON.stringify({
@@ -29,7 +28,7 @@ exports.generateDigitalToken = async (req, res) => {
       slotId: bookedSlot._id.toString()
     });
 
-    console.log("QR Data prepared:", qrData);
+   
 
     // Generate QR code URL with better options for clearer QR code
     let qrCodeUrl;
@@ -43,7 +42,7 @@ exports.generateDigitalToken = async (req, res) => {
           light: '#ffffff' // White background
         }
       });
-      console.log("QR code generated successfully with length:", qrCodeUrl.length);
+      
     } catch (error) {
       console.error("Error generating QR code:", error);
       return res.status(500).json({ error: "Failed to generate QR code" });
@@ -61,7 +60,7 @@ exports.generateDigitalToken = async (req, res) => {
         existingToken.phoneNumber = user.phoneNumber;
       }
       await existingToken.save();
-      console.log("Updated existing digital token:", existingToken._id);
+     
     } else {
       // Create a new token
       const newToken = new DigitalToken({
@@ -72,7 +71,6 @@ exports.generateDigitalToken = async (req, res) => {
         phoneNumber: user.phoneNumber
       });
       await newToken.save();
-      console.log("New digital token created:", newToken._id);
     }
     
     res.status(200).json({
@@ -270,9 +268,7 @@ exports.verifyDigitalToken = async (req, res) => {
       if (!voterId) {
         return res.status(400).json({ error: "Invalid token format: Cannot extract voter ID" });
       }
-      
-      console.log("Extracted voter ID for verification:", voterId);
-      
+            
       // Find the token in the database using various queries
       const token = await DigitalToken.findOne({ 
         $or: [

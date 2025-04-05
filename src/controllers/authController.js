@@ -14,7 +14,6 @@ const otps = {};
 
 const signup = async (req, res) => {
     try {
-        console.log('Signup request body:', req.body);
 
         const { name, email, password, adharNumber, phoneNumber, voterId } = req.body;
 
@@ -77,11 +76,6 @@ const sendOTP = async (req, res) => {
     const { phoneNumber } = req.body;
     const otp = otpUtils.generateOTP();
     try {
-        console.log("phoneNumber from request:", phoneNumber);
-        console.log('Sending OTP to:', phoneNumber);
-        console.log('Twilio Account SID:', accountSid);
-        console.log('Twilio Auth Token:', authToken);
-        console.log('Twilio Phone Number:', twilioPhoneNumber);
 
         await client.messages.create({
             body: `Your OTP is: ${otp}`,
@@ -145,7 +139,6 @@ const verifyOTP = async (req, res) => {
 
 
 const verifyOTPAndGetUID = async (req, res) => {
-    console.log('verifyOTPAndGetUID called:', req.body);
     const { phoneNumber, otp } = req.body;
     const storedOtpData = otps[phoneNumber];
 
@@ -154,7 +147,6 @@ const verifyOTPAndGetUID = async (req, res) => {
             delete otps[phoneNumber];
             try {
                 const user = await User.findOne({ phoneNumber });
-                console.log('User from database:', user);
                 if (!user) {
                     return res.status(404).json({ error: 'User not found with this phone number.' });
                 }
@@ -214,22 +206,17 @@ const login = async (req, res) => {
 
 const adminLogin = async (req, res) => {
     try {
-        console.log('Admin login attempt:', req.body);
         const { email, password } = req.body;
         
         const user = await User.findOne({ email, isAdmin: true }).select('+password');
-        console.log('Admin user found:', user ? 'Yes' : 'No');
         
         if (!user || !user.password) {
-            console.log('No admin user found or password is missing');
             return res.status(401).json({ error: "Invalid admin credentials" });
         }
         
         const passwordMatch = await bcrypt.compare(password, user.password);
-        console.log('Password match:', passwordMatch);
         
         if (!passwordMatch) {
-            console.log('Password does not match');
             return res.status(401).json({ error: "Invalid admin credentials" });
         }
         
@@ -238,7 +225,6 @@ const adminLogin = async (req, res) => {
             isAdmin: true 
         }, process.env.JWT_SECRET, { expiresIn: '1h' });
         
-        console.log('Admin login successful, token generated');
         
         res.status(200).json({ 
             token,
