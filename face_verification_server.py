@@ -230,19 +230,25 @@ def verify_face():
             
         # Log the received data structure
         logger.info(f"Received data keys: {list(data.keys())}")
+        logger.info(f"Received data: {data}")
         
-        if 'faceImage' not in data:
-            logger.error("faceImage field missing in request")
+        # Check for image field (handle both faceImage and image fields)
+        image_data = None
+        if 'faceImage' in data:
+            image_data = data['faceImage']
+        elif 'image' in data:
+            image_data = data['image']
+        else:
+            logger.error("No image field found in request")
             logger.error(f"Available fields: {list(data.keys())}")
             return jsonify({
                 'success': False,
-                'message': 'Missing required field: faceImage',
-                'error': 'missing_face_image',
+                'message': 'Missing required field: faceImage or image',
+                'error': 'missing_image',
                 'received_fields': list(data.keys())
             }), 400
 
         # Log the size of the received image data
-        image_data = data['faceImage']
         logger.info(f"Received image data length: {len(image_data)}")
         
         # Validate image data format
@@ -290,11 +296,18 @@ def verify_face():
                 distance_metric='cosine'  # Use cosine distance for better performance
             )
             
+            # Calculate match percentage
+            distance = float(result['distance'])
+            threshold = float(result['threshold'])
+            match_percentage = max(0, min(100, (1 - (distance / threshold)) * 100))
+            
             return jsonify({
                 'success': True,
                 'verified': result['verified'],
-                'distance': float(result['distance']),
-                'threshold': float(result['threshold'])
+                'distance': distance,
+                'threshold': threshold,
+                'matchPercentage': match_percentage,
+                'isMatch': result['verified']
             })
         except Exception as e:
             logger.error(f"Image processing error: {str(e)}")
@@ -302,12 +315,16 @@ def verify_face():
                 return jsonify({
                     'success': False,
                     'message': 'No face detected in the image',
-                    'error': 'no_face_detected'
+                    'error': 'no_face_detected',
+                    'matchPercentage': 0,
+                    'isMatch': False
                 }), 400
             return jsonify({
                 'success': False,
                 'message': f'Error processing image: {str(e)}',
-                'error': 'image_processing_error'
+                'error': 'image_processing_error',
+                'matchPercentage': 0,
+                'isMatch': False
             }), 400
             
     except Exception as e:
@@ -316,7 +333,9 @@ def verify_face():
         return jsonify({
             'success': False,
             'message': f'Error verifying face: {str(e)}',
-            'error': 'verification_error'
+            'error': 'verification_error',
+            'matchPercentage': 0,
+            'isMatch': False
         }), 500
 
 @app.route('/register', methods=['POST'])
