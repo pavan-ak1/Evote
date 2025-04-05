@@ -42,7 +42,10 @@ import tempfile
 import traceback
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Create temp directory
@@ -54,7 +57,7 @@ if not os.path.exists(temp_dir):
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Backend API configuration
+# Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 
@@ -153,11 +156,12 @@ def root_health_check():
 def health_check():
     try:
         # Check if models are initialized
-        if not initialize_models():
+        if not models_initialized:
             return jsonify({
                 'status': 'error',
-                'message': 'Models not initialized'
-            }), 500
+                'message': 'Face verification models not initialized',
+                'error': 'models_not_initialized'
+            }), 503
 
         # Check memory usage
         memory = psutil.virtual_memory()
@@ -167,16 +171,32 @@ def health_check():
             'percent': memory.percent
         }
 
+        # Check if temp directory is writable
+        try:
+            test_file = os.path.join(temp_dir, 'test.txt')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except Exception as e:
+            logger.error(f"Temp directory not writable: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Temp directory not writable',
+                'error': 'temp_dir_not_writable'
+            }), 503
+
         return jsonify({
             'status': 'healthy',
             'memory': memory_status,
+            'models_initialized': models_initialized,
             'timestamp': datetime.now().isoformat()
         }), 200
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': str(e),
+            'error': 'health_check_failed'
         }), 500
 
 @app.route('/verify', methods=['POST'])
@@ -488,10 +508,16 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-# Initialize models when the application starts
-if not initialize_models():
-    logger.error("Failed to initialize models")
-    exit(1)
+# Initialize models at startup
+try:
+    if not initialize_models():
+        logger.error("Failed to initialize models at startup")
+        raise Exception("Failed to initialize face verification models")
+    models_initialized = True
+    logger.info("Models initialized successfully at startup")
+except Exception as e:
+    logger.error(f"Error during model initialization: {str(e)}")
+    models_initialized = False
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
