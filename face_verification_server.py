@@ -207,6 +207,18 @@ def verify_face():
         # Log the incoming request
         logger.info("Received verification request")
         
+        # Log request headers
+        logger.info(f"Request headers: {dict(request.headers)}")
+        
+        # Check content type
+        if request.content_type != 'application/json':
+            logger.error(f"Invalid content type: {request.content_type}")
+            return jsonify({
+                'success': False,
+                'message': 'Invalid content type. Expected application/json',
+                'error': 'invalid_content_type'
+            }), 400
+        
         data = request.get_json()
         if not data:
             logger.error("No JSON data received in request")
@@ -216,17 +228,40 @@ def verify_face():
                 'error': 'missing_data'
             }), 400
             
+        # Log the received data structure
+        logger.info(f"Received data keys: {list(data.keys())}")
+        
         if 'faceImage' not in data:
             logger.error("faceImage field missing in request")
+            logger.error(f"Available fields: {list(data.keys())}")
             return jsonify({
                 'success': False,
                 'message': 'Missing required field: faceImage',
-                'error': 'missing_face_image'
+                'error': 'missing_face_image',
+                'received_fields': list(data.keys())
             }), 400
 
         # Log the size of the received image data
         image_data = data['faceImage']
         logger.info(f"Received image data length: {len(image_data)}")
+        
+        # Validate image data format
+        if not isinstance(image_data, str):
+            logger.error(f"Invalid image data type: {type(image_data)}")
+            return jsonify({
+                'success': False,
+                'message': 'Invalid image data format',
+                'error': 'invalid_image_format'
+            }), 400
+            
+        # Check if image data is base64 encoded
+        if not image_data.startswith('data:image/') and not image_data.startswith('/9j/'):
+            logger.error("Image data is not properly formatted")
+            return jsonify({
+                'success': False,
+                'message': 'Invalid image data format',
+                'error': 'invalid_image_format'
+            }), 400
         
         # Process image in memory
         try:
