@@ -178,6 +178,19 @@
             container.classList.toggle('hidden');
             if (!container.classList.contains('hidden')) {
                 document.getElementById('user-input').focus();
+                // Add welcome message if chat is empty
+                if (document.getElementById('chat-box').children.length === 0) {
+                    addMessage('bot', `Hello! I'm your Voter Assistant. I can help you with:
+
+• Voter Registration Process
+• Voter ID Card Information
+• Election Procedures
+• Polling Booth Locations
+• Voting Rights and Responsibilities
+• Election Dates and Schedules
+
+Please ask me anything about voting in India!`);
+                }
             }
         }
 
@@ -234,7 +247,10 @@
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/\n\s*[-*]\s/g, '\n• ')
-                .replace(/\n\s*\d+\.\s/g, '\n$&');
+                .replace(/\n\s*\d+\.\s/g, '\n$&')
+                .replace(/\n###\s(.*?)\n/g, '\n<h3>$1</h3>\n')
+                .replace(/\n##\s(.*?)\n/g, '\n<h2>$1</h2>\n')
+                .replace(/\n#\s(.*?)\n/g, '\n<h1>$1</h1>\n');
             
             messageDiv.innerHTML = formattedMessage;
             document.getElementById('chat-box').appendChild(messageDiv);

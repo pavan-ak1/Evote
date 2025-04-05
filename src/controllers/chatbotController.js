@@ -37,10 +37,11 @@ exports.getChatbotResponse = async (req, res) => {
         When comparing options or listing features, use bullet points.
         
         Always format your responses with:
-        - Clear headings
-        - Proper spacing
-        - Bullet points or numbered lists where appropriate
-        - Bold text for important terms or requirements
+        - Clear headings using markdown (## for main headings, ### for subheadings)
+        - Proper spacing between sections
+        - Bullet points (•) for lists
+        - Bold text (**text**) for important terms or requirements
+        - Numbered lists (1., 2., etc.) for steps
         
         Focus on providing information about:
         - Voter registration process
