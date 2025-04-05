@@ -40,6 +40,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import traceback
+import queue
+import concurrent.futures
 
 # Configure logging
 logging.basicConfig(
@@ -55,17 +57,26 @@ if not os.path.exists(temp_dir):
     logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
-# Configure CORS to allow all origins for development
-CORS(app)
+# Configure CORS with specific settings
+CORS(app, resources={
+    r"/*": {
+        "origins": ["*"],  # Allow all origins in development
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": True,
+        "max_age": 3600
+    }
+})
 
-# Global OPTIONS handler (optional; if you run into conflicts you may remove this handler)
+# Global OPTIONS handler
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
         response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Accept")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,Accept")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        response.headers.add("Access-Control-Max-Age", "3600")
         return response
 
 # Backend API configuration with better error handling
@@ -149,21 +160,38 @@ def process_request(func):
     """Decorator to handle request queuing and memory management"""
     def wrapped(*args, **kwargs):
         try:
-            # Wait for queue slot
-            request_queue.put(True, timeout=30)  # 30 second timeout
-            
-            # Initialize models if needed
-            if not models_initialized and not initialize_models():
+            # Wait for queue slot with timeout
+            try:
+                request_queue.put(True, timeout=30)  # 30 second timeout
+            except queue.Full:
+                logger.error("Request queue is full")
                 return jsonify({
                     'success': False,
-                    'message': 'Service is initializing, please try again in a few seconds'
+                    'message': 'Server is busy. Please try again later.'
                 }), 503
+            
+            # Initialize models if needed
+            if not models_initialized:
+                with model_lock:
+                    if not models_initialized and not initialize_models():
+                        return jsonify({
+                            'success': False,
+                            'message': 'Service is initializing, please try again in a few seconds'
+                        }), 503
+                    models_initialized = True
             
             # Process request in thread pool with request context
             with app.app_context():
                 future = executor.submit(func, *args, **kwargs)
-                result = future.result(timeout=30)  # 30 second timeout
-                return result
+                try:
+                    result = future.result(timeout=30)  # 30 second timeout
+                    return result
+                except concurrent.futures.TimeoutError:
+                    logger.error("Request processing timed out")
+                    return jsonify({
+                        'success': False,
+                        'message': 'Request processing timed out'
+                    }), 504
                 
         except Exception as e:
             logger.error(f"Request processing error: {str(e)}")
@@ -174,7 +202,7 @@ def process_request(func):
         finally:
             try:
                 request_queue.get_nowait()  # Release queue slot
-            except:
+            except queue.Empty:
                 pass
             manage_memory()
             # Clear any large variables
@@ -616,50 +644,76 @@ def check_face_quality(image):
     return True, "Image quality is good"
 
 # Initialize models at startup
-try:
-    DeepFace.build_model("Facenet")
-    detector_backend = 'skip'
-    DeepFace.extract_faces(img_path=np.zeros([16, 16, 3]), target_size=(16, 16), detector_backend=detector_backend)
-    logging.info("Models initialized successfully at startup")
-except Exception as e:
-    logging.error(f"Error initializing models: {str(e)}")
-    raise
+def initialize_models_at_startup():
+    try:
+        logger.info("Starting model initialization...")
+        
+        # Create necessary directories
+        os.makedirs(temp_dir, exist_ok=True)
+        os.makedirs(DEEPFACE_DIR, exist_ok=True)
+        os.makedirs(os.path.join(DEEPFACE_DIR, '.deepface', 'weights'), exist_ok=True)
+        
+        # Initialize TensorFlow with minimal memory usage
+        tf.config.set_visible_devices([], 'GPU')
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        
+        # Initialize DeepFace models
+        DeepFace.build_model("Facenet")
+        detector_backend = 'skip'
+        DeepFace.extract_faces(img_path=np.zeros([16, 16, 3]), target_size=(16, 16), detector_backend=detector_backend)
+        
+        logger.info("Models initialized successfully at startup")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing models: {str(e)}")
+        logger.error(traceback.format_exc())
+        return False
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
     try:
-        if not initialize_models():
+        # Initialize models
+        if not initialize_models_at_startup():
             logger.error("Failed to initialize models at startup")
             raise Exception("Failed to initialize face verification models")
         models_initialized = True
-        logger.info("Models initialized successfully at startup")
+        
+        # Validate environment variables
+        required_env_vars = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY']
+        missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
+        if missing_vars:
+            raise Exception(f"Missing required environment variables: {', '.join(missing_vars)}")
+        
+        # Configure server
+        port = int(os.environ.get('PORT', 10000))
+        host = '0.0.0.0'
+        
+        logger.info(f"Starting server on {host}:{port}...")
+        logger.info(f"Environment variables:")
+        logger.info(f"PORT: {port}")
+        logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
+        logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
+        
+        # Start server
+        app.run(
+            host=host,
+            port=port,
+            debug=False,
+            threaded=True,
+            use_reloader=False
+        )
     except Exception as e:
-        logger.error(f"Error during model initialization: {str(e)}")
-        models_initialized = False
-
-    port = int(os.environ.get('PORT', 10000))
-    host = '0.0.0.0'
-    
-    logger.info(f"Starting server on {host}:{port}...")
-    logger.info(f"Environment variables:")
-    logger.info(f"PORT: {port}")
-    logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
-    logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
-    
-    app.run(
-        host=host,
-        port=port,
-        debug=False,
-        threaded=True,
-        use_reloader=False
-    )
+        logger.error(f"Fatal error during startup: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise
 
 # =======================
 # Modified endpoint below
 # =======================
 
 @app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
-@cross_origin(origins="*")  # <-- Added cross_origin decorator here
+@cross_origin(origins="*")
 @process_request
 def upload_photo():
     try:
@@ -679,31 +733,73 @@ def upload_photo():
                 'message': 'No image data received'
             }), 400
 
-        image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
-        
-        cloudinary_response = requests.post(
-            f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
-            files={'file': f'data:image/jpeg;base64,{image_data}'},
-            data={
-                'api_key': os.environ.get('CLOUDINARY_API_KEY'),
-                'timestamp': int(datetime.now().timestamp()),
-                'folder': 'face-verification'
-            }
-        )
-
-        if cloudinary_response.status_code != 200:
+        # Validate Cloudinary credentials
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
+        api_key = os.environ.get('CLOUDINARY_API_KEY')
+        if not cloud_name or not api_key:
+            logger.error("Missing Cloudinary credentials")
             return jsonify({
                 'success': False,
-                'message': 'Failed to upload image to Cloudinary'
+                'message': 'Server configuration error'
             }), 500
 
-        cloudinary_data = cloudinary_response.json()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Photo uploaded successfully',
-            'imageUrl': cloudinary_data['secure_url']
-        })
+        try:
+            # Process image data
+            image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
+            
+            # Validate base64 data
+            try:
+                base64.b64decode(image_data)
+            except Exception as e:
+                logger.error(f"Invalid base64 data: {str(e)}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid image data format'
+                }), 400
+
+            # Upload to Cloudinary
+            cloudinary_response = requests.post(
+                f'https://api.cloudinary.com/v1_1/{cloud_name}/image/upload',
+                files={'file': f'data:image/jpeg;base64,{image_data}'},
+                data={
+                    'api_key': api_key,
+                    'timestamp': int(datetime.now().timestamp()),
+                    'folder': 'face-verification'
+                },
+                timeout=30  # 30 second timeout
+            )
+
+            if cloudinary_response.status_code != 200:
+                logger.error(f"Cloudinary upload failed: {cloudinary_response.text}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to upload image to Cloudinary'
+                }), 500
+
+            cloudinary_data = cloudinary_response.json()
+            
+            # Clean up memory
+            del image_data
+            gc.collect()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Photo uploaded successfully',
+                'imageUrl': cloudinary_data['secure_url']
+            })
+
+        except requests.exceptions.Timeout:
+            logger.error("Cloudinary upload timed out")
+            return jsonify({
+                'success': False,
+                'message': 'Upload timed out. Please try again.'
+            }), 504
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Cloudinary request error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': 'Failed to connect to image service'
+            }), 503
 
     except Exception as e:
         logger.error(f"Photo upload error: {str(e)}")
@@ -711,3 +807,7 @@ def upload_photo():
             'success': False,
             'message': f'Error uploading photo: {str(e)}'
         }), 500
+    finally:
+        manage_memory()
+        tf.keras.backend.clear_session()
+        gc.collect()

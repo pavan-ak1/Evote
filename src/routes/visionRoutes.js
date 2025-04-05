@@ -7,7 +7,7 @@ const axios = require('axios');
 const cloudinary = require('cloudinary');
 
 // Add Python server URL configuration
-const PYTHON_SERVER_URL = 'https://face-verification-v5heid6ezq-uc.a.run.app';
+const PYTHON_SERVER_URL = 'https://voter-verify-face-ofgu.onrender.com';
 
 // Health check endpoint for the face verification service
 router.get('/face-verification/health', authMiddleware, async (req, res) => {

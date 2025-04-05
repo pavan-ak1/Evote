@@ -246,18 +246,25 @@ router.post('/face/verify', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id);
         if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+            return res.status(404).json({ 
+                success: false,
+                message: 'User not found' 
+            });
         }
 
         // Check if face is registered
         if (!user.hasFaceRegistered) {
-            return res.status(400).json({ message: 'Face not registered' });
+            return res.status(400).json({ 
+                success: false,
+                message: 'Face not registered' 
+            });
         }
 
         // Check if verification is locked
         if (user.isFaceVerificationLocked()) {
             const lockTime = user.faceVerificationLockedUntil;
             return res.status(429).json({
+                success: false,
                 message: 'Face verification temporarily locked',
                 lockedUntil: lockTime
             });
@@ -265,20 +272,25 @@ router.post('/face/verify', authMiddleware, async (req, res) => {
 
         const { faceImage } = req.body;
         if (!faceImage) {
-            return res.status(400).json({ message: 'Face image is required' });
+            return res.status(400).json({ 
+                success: false,
+                message: 'Face image is required' 
+            });
         }
 
         // Verify face with the service
         const verificationResult = await faceService.verifyFace(user.faceImage, faceImage);
         
-        if (verificationResult.isMatch) {
+        if (verificationResult.success && verificationResult.isMatch) {
             // Reset verification attempts on success
             await user.resetFaceVerificationAttempts();
             user.lastFaceVerification = new Date();
             await user.save();
 
             return res.json({
+                success: true,
                 message: 'Face verified successfully',
+                matchPercentage: verificationResult.matchPercentage,
                 lastVerification: user.lastFaceVerification
             });
         } else {
@@ -286,13 +298,16 @@ router.post('/face/verify', authMiddleware, async (req, res) => {
             await user.incrementFaceVerificationAttempts();
             
             return res.status(401).json({
+                success: false,
                 message: 'Face verification failed',
+                matchPercentage: verificationResult.matchPercentage,
                 attemptsRemaining: 3 - user.faceVerificationAttempts
             });
         }
     } catch (error) {
         console.error('Face verification error:', error);
         res.status(500).json({ 
+            success: false,
             message: 'Error verifying face',
             error: error.message 
         });
@@ -328,10 +343,14 @@ router.get('/face/status', authMiddleware, async (req, res) => {
 router.get('/face/health', async (req, res) => {
     try {
         const health = await faceService.checkHealth();
-        res.status(200).json(health);
+        res.status(200).json({
+            success: true,
+            ...health
+        });
     } catch (error) {
         console.error('Health check error:', error);
         res.status(500).json({ 
+            success: false,
             message: 'Error checking face verification service health',
             error: error.message 
         });

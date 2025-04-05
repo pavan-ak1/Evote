@@ -3,7 +3,7 @@ const cloudinary = require('cloudinary').v2;
 
 class FaceVerificationService {
     constructor() {
-        this.baseURL = 'https://face-verification-v5heid6ezq-uc.a.run.app';
+        this.baseURL = 'https://voter-verify-face-ofgu.onrender.com';
         this.maxRetries = 3;
         this.retryDelay = 1000; // 1 second
         this.initialized = false;
@@ -78,17 +78,14 @@ class FaceVerificationService {
 
                 // Register face with Python service
                 const response = await axios.post(`${this.baseURL}/api/register`, {
-                    user_id: userId,
-                    face_image: processedImage.split(',')[1] // Remove data:image/jpeg;base64, prefix
+                    userId: userId,
+                    faceImage: processedImage.split(',')[1]
                 }, {
                     timeout: 30000,
                     withCredentials: true,
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
+                        'Accept': 'application/json'
                     }
                 });
 
@@ -96,34 +93,15 @@ class FaceVerificationService {
                     throw new Error(response.data?.message || response.data?.error || 'Face registration failed');
                 }
 
-                // Upload to Cloudinary for storage
-                const uploadResponse = await cloudinary.uploader.upload(processedImage, {
-                    folder: 'face-registration',
-                    resource_type: 'auto',
-                    timeout: 30000
-                });
-
-                if (!uploadResponse || !uploadResponse.secure_url) {
-                    throw new Error('Failed to upload face image to Cloudinary');
-                }
-
                 return {
                     success: true,
-                    faceImageUrl: uploadResponse.secure_url,
-                    verified: response.data.verified || false
+                    message: response.data.message,
+                    userId: response.data.userId
                 };
 
             } catch (error) {
                 console.error(`Registration attempt ${attempt} failed:`, error.response?.data || error.message);
                 lastError = error;
-                
-                // If service is not responding, try to reinitialize
-                if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-                    this.initialized = false;
-                    if (await this.waitForService()) {
-                        continue;
-                    }
-                }
                 
                 if (attempt < this.maxRetries) {
                     await this.sleep(this.retryDelay);
@@ -131,7 +109,6 @@ class FaceVerificationService {
             }
         }
 
-        // If we get here, all retries failed
         throw new Error(lastError?.response?.data?.message || lastError?.message || 'Face registration failed after all retries');
     }
 
@@ -151,44 +128,27 @@ class FaceVerificationService {
                     throw new Error('Both images are required for verification');
                 }
 
-                // Ensure both images are in the correct format
+                // Process images
                 let processedImage1 = image1;
                 let processedImage2 = image2;
 
-                // Process image1 if needed
                 if (!processedImage1.startsWith('data:image')) {
                     processedImage1 = `data:image/jpeg;base64,${processedImage1}`;
                 }
 
-                // Process image2 if needed
-                if (processedImage2.startsWith('http')) {
-                    try {
-                        // If it's a Cloudinary URL, download it
-                        const response = await axios.get(processedImage2, { 
-                            responseType: 'arraybuffer',
-                            timeout: 15000 // 15 second timeout for download
-                        });
-                        processedImage2 = `data:image/jpeg;base64,${Buffer.from(response.data).toString('base64')}`;
-                    } catch (downloadError) {
-                        console.error('Error downloading image:', downloadError);
-                        throw new Error('Failed to download registered face image');
-                    }
-                } else if (!processedImage2.startsWith('data:image')) {
+                if (!processedImage2.startsWith('data:image')) {
                     processedImage2 = `data:image/jpeg;base64,${processedImage2}`;
                 }
 
-                const response = await axios.post(`${this.baseURL}/api/verify`, {
-                    face_image: processedImage1.split(',')[1], // Remove data:image/jpeg;base64, prefix
-                    registered_image: processedImage2.split(',')[1], // Remove data:image/jpeg;base64, prefix
+                const response = await axios.post(`${this.baseURL}/verify`, {
+                    image1: processedImage1.split(',')[1],
+                    image2: processedImage2.split(',')[1]
                 }, {
                     timeout: 30000,
                     withCredentials: true,
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
+                        'Accept': 'application/json'
                     }
                 });
 
@@ -199,6 +159,7 @@ class FaceVerificationService {
                 return {
                     success: true,
                     matchPercentage: response.data.matchPercentage || 0,
+                    isMatch: response.data.isMatch || false,
                     error: null
                 };
 
@@ -215,6 +176,7 @@ class FaceVerificationService {
         return {
             success: false,
             matchPercentage: 0,
+            isMatch: false,
             error: lastError?.response?.data?.message || lastError?.message || 'Face verification failed after all retries'
         };
     }
