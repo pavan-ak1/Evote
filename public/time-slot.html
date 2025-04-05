@@ -146,11 +146,11 @@
           return;
         }
 
-        const response = await fetch(`https://voter-verify-backend.onrender.com/api/slots/available?date=${date}`, {
-          headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+        const response = await fetch(`https://voter-verify-backend-ry3f.onrender.com/api/slots/available?date=${date}`, {
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
 
@@ -229,13 +229,18 @@
         const token = localStorage.getItem("token");
         if (!token) return window.location.href = "login.html";
 
-        const response = await fetch("https://voter-verify-backend.onrender.com/api/slots/book", {
-          method: "POST",
+        const response = await fetch("https://voter-verify-backend-ry3f.onrender.com/api/slots/book", {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify({ slotId })
+          body: JSON.stringify({
+            date: selectedDate,
+            startTime: selectedStartTime,
+            endTime: selectedEndTime
+          })
         });
 
         if (!response.ok) throw new Error("Failed to book slot.");
@@ -299,11 +304,11 @@
           isAdmin: localStorage.getItem("isAdmin")
         });
 
-        const response = await fetch("https://voter-verify-backend.onrender.com/api/slots/booked", {
-          headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+        const response = await fetch("https://voter-verify-backend-ry3f.onrender.com/api/slots/booked", {
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
 

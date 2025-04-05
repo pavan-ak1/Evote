@@ -200,16 +200,16 @@
         }
 
         // Register the face
-        const response = await fetch('https://voter-verify-backend.onrender.com/voter/face/register', {
+        const response = await fetch('https://voter-verify-backend-ry3f.onrender.com/voter/face/register', {
           method: 'POST',
-          headers: { 
+          headers: {
+            'Authorization': 'Bearer ' + token,
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${currentToken}`,
             'Accept': 'application/json'
           },
-          body: JSON.stringify({ 
-            faceImage: imageData,
-            userId: userId 
+          body: JSON.stringify({
+            image: imageData,
+            userId: userId
           })
         });
 
