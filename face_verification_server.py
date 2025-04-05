@@ -76,15 +76,44 @@ logger.info(f"DeepFace directory set to: {DEEPFACE_DIR}")
 
 def manage_memory():
     """Aggressive memory management"""
-    gc.collect()
-    gc.set_threshold(100, 5, 5)  # More aggressive garbage collection
-    
-    # Check memory usage
-    process = psutil.Process(os.getpid())
-    memory_usage = process.memory_info().rss / 1024 / 1024  # Convert to MB
-    if memory_usage > 200:  # If memory usage exceeds 200MB
-        logger.warning(f"High memory usage detected: {memory_usage:.2f}MB")
-        gc.collect()  # Force garbage collection
+    try:
+        # Force garbage collection
+        gc.collect()
+        gc.set_threshold(100, 5, 5)  # More aggressive garbage collection
+        
+        # Check memory usage
+        process = psutil.Process(os.getpid())
+        memory_usage = process.memory_info().rss / 1024 / 1024  # Convert to MB
+        
+        if memory_usage > 200:  # If memory usage exceeds 200MB
+            logger.warning(f"High memory usage detected: {memory_usage:.2f}MB")
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Clear TensorFlow session
+            tf.keras.backend.clear_session()
+            
+            # Clear any cached models
+            if 'model' in globals():
+                del globals()['model']
+            
+            # Clear any large variables
+            for var in list(globals().keys()):
+                if var.startswith('_') or var in ['__builtins__', '__file__', '__name__']:
+                    continue
+                if isinstance(globals()[var], (np.ndarray, tf.Tensor)):
+                    del globals()[var]
+            
+            # Force garbage collection again
+            gc.collect()
+            
+            # Log memory after cleanup
+            memory_after = process.memory_info().rss / 1024 / 1024
+            logger.info(f"Memory after cleanup: {memory_after:.2f}MB")
+            
+    except Exception as e:
+        logger.error(f"Error in memory management: {str(e)}")
 
 def initialize_models():
     """Initialize DeepFace models with a minimal test image"""
@@ -142,6 +171,13 @@ def process_request(func):
             except:
                 pass
             manage_memory()
+            # Clear any large variables
+            for var in list(locals().keys()):
+                if var.startswith('_') or var in ['self', 'args', 'kwargs']:
+                    continue
+                if isinstance(locals()[var], (np.ndarray, tf.Tensor)):
+                    del locals()[var]
+            gc.collect()
     wrapped.__name__ = func.__name__  # Preserve the original function name
     return wrapped
 
@@ -230,98 +266,98 @@ def verify_face():
             
         # Log the received data structure
         logger.info(f"Received data keys: {list(data.keys())}")
-        logger.info(f"Received data: {data}")
         
-        # Check for image field (handle both faceImage and image fields)
-        image_data = None
-        if 'faceImage' in data:
-            image_data = data['faceImage']
-        elif 'image' in data:
-            image_data = data['image']
-        else:
-            logger.error("No image field found in request")
+        # Check for image fields
+        if 'image1' not in data or 'image2' not in data:
+            logger.error("Missing required image fields")
             logger.error(f"Available fields: {list(data.keys())}")
             return jsonify({
                 'success': False,
-                'message': 'Missing required field: faceImage or image',
-                'error': 'missing_image',
+                'message': 'Missing required fields: image1 and image2',
+                'error': 'missing_images',
                 'received_fields': list(data.keys())
             }), 400
 
-        # Log the size of the received image data
-        logger.info(f"Received image data length: {len(image_data)}")
-        
-        # Validate image data format
-        if not isinstance(image_data, str):
-            logger.error(f"Invalid image data type: {type(image_data)}")
-            return jsonify({
-                'success': False,
-                'message': 'Invalid image data format',
-                'error': 'invalid_image_format'
-            }), 400
-            
-        # Check if image data is base64 encoded
-        if not image_data.startswith('data:image/') and not image_data.startswith('/9j/'):
-            logger.error("Image data is not properly formatted")
-            return jsonify({
-                'success': False,
-                'message': 'Invalid image data format',
-                'error': 'invalid_image_format'
-            }), 400
-        
-        # Process image in memory
+        # Process both images with memory optimization
         try:
-            image_data = image_data.split(',')[1] if ',' in image_data else image_data
-            nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            # Process first image
+            image1_data = data['image1'].split(',')[1] if ',' in data['image1'] else data['image1']
+            nparr1 = np.frombuffer(base64.b64decode(image1_data), np.uint8)
+            img1 = cv2.imdecode(nparr1, cv2.IMREAD_COLOR)
             
-            if img is None:
-                logger.error("Failed to decode image")
+            # Clear memory after processing first image
+            del image1_data, nparr1
+            gc.collect()
+            
+            # Process second image
+            image2_data = data['image2'].split(',')[1] if ',' in data['image2'] else data['image2']
+            nparr2 = np.frombuffer(base64.b64decode(image2_data), np.uint8)
+            img2 = cv2.imdecode(nparr2, cv2.IMREAD_COLOR)
+            
+            # Clear memory after processing second image
+            del image2_data, nparr2
+            gc.collect()
+            
+            if img1 is None or img2 is None:
+                logger.error("Failed to decode one or both images")
                 return jsonify({
                     'success': False,
-                    'message': 'Failed to decode image',
+                    'message': 'Failed to decode images',
                     'error': 'image_decode_failed'
                 }), 400
                 
             # Convert BGR to RGB
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            rgb_img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+            rgb_img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
             
-            # Verify face using DeepFace with optimized settings
+            # Clear original images
+            del img1, img2
+            gc.collect()
+            
+            # Verify faces using DeepFace with optimized settings
             result = DeepFace.verify(
-                rgb_img, 
-                rgb_img, 
+                rgb_img1, 
+                rgb_img2, 
                 model_name='Facenet',
                 detector_backend='skip',  # Skip face detection for self-comparison
                 enforce_detection=False,  # Don't enforce face detection
                 distance_metric='cosine'  # Use cosine distance for better performance
             )
             
+            # Clear processed images
+            del rgb_img1, rgb_img2
+            gc.collect()
+            
             # Calculate match percentage
             distance = float(result['distance'])
             threshold = float(result['threshold'])
             match_percentage = max(0, min(100, (1 - (distance / threshold)) * 100))
             
+            # Clear result dictionary
+            del result
+            gc.collect()
+            
             return jsonify({
                 'success': True,
-                'verified': result['verified'],
+                'verified': True if match_percentage >= 70 else False,  # 70% threshold for match
                 'distance': distance,
                 'threshold': threshold,
                 'matchPercentage': match_percentage,
-                'isMatch': result['verified']
+                'isMatch': True if match_percentage >= 70 else False
             })
         except Exception as e:
             logger.error(f"Image processing error: {str(e)}")
             if "No face detected" in str(e):
                 return jsonify({
                     'success': False,
-                    'message': 'No face detected in the image',
+                    'message': 'No face detected in one or both images',
                     'error': 'no_face_detected',
                     'matchPercentage': 0,
                     'isMatch': False
                 }), 400
             return jsonify({
                 'success': False,
-                'message': f'Error processing image: {str(e)}',
+                'message': f'Error processing images: {str(e)}',
                 'error': 'image_processing_error',
                 'matchPercentage': 0,
                 'isMatch': False
@@ -332,11 +368,16 @@ def verify_face():
         logger.error(f"Request data: {str(data)}")
         return jsonify({
             'success': False,
-            'message': f'Error verifying face: {str(e)}',
+            'message': f'Error verifying faces: {str(e)}',
             'error': 'verification_error',
             'matchPercentage': 0,
             'isMatch': False
         }), 500
+    finally:
+        # Final cleanup
+        manage_memory()
+        tf.keras.backend.clear_session()
+        gc.collect()
 
 @app.route('/register', methods=['POST'])
 @process_request
