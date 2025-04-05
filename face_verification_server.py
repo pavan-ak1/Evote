@@ -741,3 +741,59 @@ def handle_verify_options():
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
+
+@app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
+def upload_photo():
+    try:
+        # Handle OPTIONS request
+        if request.method == 'OPTIONS':
+            return jsonify({'status': 'ok'}), 200
+
+        # Check content type
+        if request.content_type != 'application/json':
+            return jsonify({
+                'success': False,
+                'message': 'Invalid content type. Expected application/json'
+            }), 400
+
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'No image data received'
+            }), 400
+
+        # Convert image to base64 for Cloudinary
+        image_data = data['image'].split(',')[1] if ',' in data['image'] else data['image']
+        
+        # Upload to Cloudinary
+        cloudinary_response = requests.post(
+            f'https://api.cloudinary.com/v1_1/{os.environ.get("CLOUDINARY_CLOUD_NAME")}/image/upload',
+            files={'file': f'data:image/jpeg;base64,{image_data}'},
+            data={
+                'api_key': os.environ.get('CLOUDINARY_API_KEY'),
+                'timestamp': int(datetime.now().timestamp()),
+                'folder': 'face-verification'
+            }
+        )
+
+        if cloudinary_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to upload image to Cloudinary'
+            }), 500
+
+        cloudinary_data = cloudinary_response.json()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Photo uploaded successfully',
+            'imageUrl': cloudinary_data['secure_url']
+        })
+
+    except Exception as e:
+        logger.error(f"Photo upload error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Error uploading photo: {str(e)}'
+        }), 500
