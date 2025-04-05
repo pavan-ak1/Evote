@@ -55,15 +55,25 @@ if not os.path.exists(temp_dir):
     logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
-# Configure CORS with specific origins
+# Configure CORS to allow all origins for development
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://voter-verify-backend-ry3f.onrender.com"],
+        "origins": "*",  # Allow all origins
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Accept"],
-        "supports_credentials": True
+        "supports_credentials": False
     }
 })
+
+# Add a global OPTIONS handler
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Accept")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        return response
 
 # Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-backend-ry3f.onrender.com')
