@@ -137,24 +137,51 @@ def manage_memory():
     except Exception as e:
         logger.error(f"Error in memory management: {str(e)}")
 
-def initialize_models():
-    """Initialize DeepFace models with a minimal test image"""
+def initialize_models_at_startup():
+    """Initialize models with minimal settings"""
     try:
-        # Create a minimal test image
-        test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+        logger.info("Starting model initialization...")
         
-        # Initialize only the Facenet model for faster startup and lower memory usage
-        DeepFace.build_model("Facenet")
+        # Create necessary directories
+        os.makedirs(temp_dir, exist_ok=True)
+        os.makedirs(DEEPFACE_DIR, exist_ok=True)
+        os.makedirs(os.path.join(DEEPFACE_DIR, '.deepface', 'weights'), exist_ok=True)
         
-        # Initialize face detector with minimal settings
-        detector_backend = 'skip'  # Skip face detection for initialization
-        DeepFace.extract_faces(img_path=test_image, target_size=(16, 16), detector_backend=detector_backend)
+        # Initialize TensorFlow with minimal memory usage
+        tf.config.set_visible_devices([], 'GPU')
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
         
-        logger.info("Models initialized successfully")
-        return True
+        # Initialize DeepFace models with minimal settings
+        try:
+            # First try to load from cache
+            model = DeepFace.build_model("Facenet")
+            if model is None:
+                raise Exception("Failed to load model from cache")
+            
+            # Test with minimal image
+            test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+            DeepFace.extract_faces(img_path=test_image, target_size=(16, 16), detector_backend='skip')
+            
+            # Clear test data
+            del test_image
+            gc.collect()
+            
+            logger.info("Models initialized successfully from cache")
+            return True
+        except Exception as e:
+            logger.warning(f"Cache load failed, downloading models: {str(e)}")
+            # If cache fails, download with minimal settings
+            DeepFace.build_model("Facenet", model_name="Facenet", detector_backend="skip")
+            logger.info("Models downloaded and initialized successfully")
+            return True
+            
     except Exception as e:
         logger.error(f"Error initializing models: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
+    finally:
+        manage_memory()
 
 def process_request(func):
     """Decorator to handle request queuing and memory management"""
@@ -648,46 +675,6 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-def initialize_models_at_startup():
-    """Initialize models with minimal settings"""
-    try:
-        logger.info("Starting model initialization...")
-        
-        # Create necessary directories
-        os.makedirs(temp_dir, exist_ok=True)
-        os.makedirs(DEEPFACE_DIR, exist_ok=True)
-        os.makedirs(os.path.join(DEEPFACE_DIR, '.deepface', 'weights'), exist_ok=True)
-        
-        # Initialize TensorFlow with minimal memory usage
-        tf.config.set_visible_devices([], 'GPU')
-        tf.config.threading.set_inter_op_parallelism_threads(1)
-        tf.config.threading.set_intra_op_parallelism_threads(1)
-        
-        # Initialize DeepFace models with minimal settings
-        try:
-            # First try to load from cache
-            model = DeepFace.build_model("Facenet")
-            if model is None:
-                raise Exception("Failed to load model from cache")
-            
-            # Test with minimal image
-            test_image = np.zeros((16, 16, 3), dtype=np.uint8)
-            DeepFace.extract_faces(img_path=test_image, target_size=(16, 16), detector_backend='skip')
-            
-            logger.info("Models initialized successfully from cache")
-            return True
-        except Exception as e:
-            logger.warning(f"Cache load failed, downloading models: {str(e)}")
-            # If cache fails, download with minimal settings
-            DeepFace.build_model("Facenet", model_name="Facenet", detector_backend="skip")
-            logger.info("Models downloaded and initialized successfully")
-            return True
-            
-    except Exception as e:
-        logger.error(f"Error initializing models: {str(e)}")
-        logger.error(traceback.format_exc())
-        return False
-
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
     try:
@@ -806,7 +793,7 @@ def upload_photo():
             logger.info(f"Successfully uploaded to Cloudinary: {cloudinary_data.get('secure_url')}")
             
             # Clean up memory
-            del image_data
+            del image_data, decoded_data
             gc.collect()
             
             return jsonify({
