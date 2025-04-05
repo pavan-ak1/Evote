@@ -108,7 +108,24 @@
   <footer class="bg-[#160C56] text-white text-center py-4">
     <p>&copy; 2024 E-Voting System. All rights reserved.</p>
   </footer>
-  <script src="js/header-functionality.js"></script>
+  <script>
+    // Header functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const menuToggle = document.getElementById('menu-toggle');
+      const sidebar = document.getElementById('mobile-sidebar');
+      const sidebarClose = document.getElementById('sidebar-close');
+
+      if (menuToggle && sidebar && sidebarClose) {
+        menuToggle.addEventListener('click', () => {
+          sidebar.classList.remove('-translate-x-full');
+        });
+
+        sidebarClose.addEventListener('click', () => {
+          sidebar.classList.add('-translate-x-full');
+        });
+      }
+    });
+  </script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const token = localStorage.getItem('token');
@@ -118,6 +135,7 @@
       }
       startCamera();
     });
+
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
@@ -126,6 +144,7 @@
         showStatus(`Camera error: ${err.message}`, false);
       }
     }
+
     async function captureAndRegister() {
       const registerButton = document.getElementById('capture-btn');
       const originalText = registerButton.textContent;
@@ -171,7 +190,7 @@
         const response = await fetch('/voter/face/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ image: imageBase64 })
+          body: JSON.stringify({ image: imageData })
         });
 
         const data = await response.json();
@@ -227,6 +246,7 @@
           statusElement.classList.add('info');
       }
     }
+
     document.getElementById('capture-btn').addEventListener('click', captureAndRegister);
   </script>
 </body>

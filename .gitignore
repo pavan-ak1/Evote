@@ -77,6 +77,8 @@ lerna-debug.log*
 .pnpm-debug.log*
 debug.log
 *.log.*
+server.log
+face_verification.log
 
 # Runtime data
 pids/
@@ -95,6 +97,21 @@ tmp/
 .temp/
 cache/
 .cache/
+temp1.jpg
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.ico
+*.webp
+*.svg
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
 
 # IDE
 .idea/
@@ -124,21 +141,6 @@ out/
 # Temporary files
 *.tmp
 *.temp
-temp1.jpg
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.tiff
-*.ico
-*.webp
-*.svg
-*.mp4
-*.mov
-*.avi
-*.mkv
-*.webm
 
 # Database
 *.sqlite
@@ -168,6 +170,7 @@ serviceAccountKey.json
 *~
 
 # Admin management scripts
+create-admin.js
 update-admin.js
 check-admin.js
 change-admin-password.js
@@ -214,3 +217,10 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 *.lnk
+
+# Project specific
+start.sh
+build.sh
+start_server.py
+gunicorn_config.py
+render.yaml
