@@ -13,11 +13,17 @@ exports.generateDigitalToken = async (req, res) => {
   try {
     const voterId = req.user._id.toString();
     
-
     // Find the user's booked slot
     const user = await User.findById(voterId).populate('timeSlot');
-    if (!user || !user.timeSlot) {
-      return res.status(404).json({ error: "No booked slot found for this voter." });
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    if (!user.timeSlot) {
+      return res.status(400).json({ 
+        error: "You need to book a time slot first before generating a digital token.",
+        redirect: "/time-slot.html"
+      });
     }
 
     const bookedSlot = user.timeSlot;
@@ -27,8 +33,6 @@ exports.generateDigitalToken = async (req, res) => {
       voterId: voterId,
       slotId: bookedSlot._id.toString()
     });
-
-   
 
     // Generate QR code URL with better options for clearer QR code
     let qrCodeUrl;

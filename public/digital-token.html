@@ -181,7 +181,8 @@
                 day: 'numeric'
               });
               const startTime = userData.timeSlot.startTime || 'N/A';
-              timeSlotText = `${formattedDate} at ${startTime}`;
+              const endTime = userData.timeSlot.endTime || 'N/A';
+              timeSlotText = `${formattedDate} from ${startTime} to ${endTime}`;
             } else {
               console.error('Invalid date:', userData.timeSlot.date);
               timeSlotText = 'Not Booked';
@@ -193,11 +194,19 @@
         }
         
         voterDetailsElement.innerHTML = `
-          <h5 class="mb-3">Voter Information</h5>
-          <div><strong>Name:</strong> ${userData.name || 'N/A'}</div>
-          <div><strong>Voter ID:</strong> ${userData.voterId || userData._id || 'N/A'}</div>
-          <div><strong>Phone:</strong> ${userData.phoneNumber || 'N/A'}</div>
-          <div><strong>Time Slot:</strong> ${timeSlotText}</div>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <h5 class="text-lg font-semibold mb-3">Voter Information</h5>
+            <div class="grid grid-cols-2 gap-2 text-left">
+              <div class="font-medium">Name:</div>
+              <div>${userData.name || 'N/A'}</div>
+              <div class="font-medium">Voter ID:</div>
+              <div>${userData.voterId || userData._id || 'N/A'}</div>
+              <div class="font-medium">Phone:</div>
+              <div>${userData.phoneNumber || 'N/A'}</div>
+              <div class="font-medium">Time Slot:</div>
+              <div>${timeSlotText}</div>
+            </div>
+          </div>
         `;
       }
     }
@@ -244,6 +253,14 @@
         
         if (!response.ok) {
           const errorData = await response.json();
+          if (errorData.redirect) {
+            // If we need to redirect to time slot booking
+            showError(errorData.error);
+            setTimeout(() => {
+              window.location.href = errorData.redirect;
+            }, 2000);
+            return;
+          }
           throw new Error(errorData.error || "Failed to generate digital token");
         }
         
