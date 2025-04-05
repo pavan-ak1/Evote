@@ -136,23 +136,17 @@ def initialize_models():
         # Create a minimal test image
         test_image = np.zeros((16, 16, 3), dtype=np.uint8)
         
-        # Ensure directories exist
-        weights_dir = os.path.join(DEEPFACE_DIR, '.deepface', 'weights')
-        os.makedirs(weights_dir, exist_ok=True)
+        # Initialize only the most commonly used model
+        DeepFace.build_model("Facenet")
         
-        # Test DeepFace with minimal configuration
-        result = DeepFace.verify(test_image, test_image, 
-                               model_name='Facenet',
-                               detector_backend='skip',
-                               enforce_detection=False)
+        # Initialize face detector with minimal settings
+        detector_backend = 'skip'  # Skip face detection for initialization
+        DeepFace.extract_faces(img_path = test_image, target_size = (16, 16), detector_backend = detector_backend)
         
-        logger.info("DeepFace models initialized successfully")
+        logger.info("Models initialized successfully")
         return True
     except Exception as e:
-        logger.error(f"Error initializing DeepFace models: {str(e)}")
-        logger.error(f"Current working directory: {os.getcwd()}")
-        logger.error(f"DeepFace directory: {DEEPFACE_DIR}")
-        logger.error(f"Weights directory: {os.path.join(DEEPFACE_DIR, '.deepface', 'weights')}")
+        logger.error(f"Error initializing models: {str(e)}")
         return False
 
 def process_request(func):
@@ -193,7 +187,7 @@ def process_request(func):
                 if isinstance(locals()[var], (np.ndarray, tf.Tensor)):
                     del locals()[var]
             gc.collect()
-    wrapped._name_ = func._name_  # Preserve the original function name
+    wrapped.__name__ = func.__name__  # Preserve the original function name
     return wrapped
 
 @app.route('/', methods=['GET'])
@@ -251,6 +245,7 @@ def health_check():
         }), 500
 
 @app.route('/verify', methods=['POST'])
+@process_request
 def verify_face():
     try:
         manage_memory()  # Check memory before processing
@@ -258,42 +253,28 @@ def verify_face():
         # Log the incoming request
         logger.info("Received verification request")
         
-        # Log request headers
-        logger.info(f"Request headers: {dict(request.headers)}")
-        
         # Check content type
         if request.content_type != 'application/json':
-            logger.error(f"Invalid content type: {request.content_type}")
             return jsonify({
                 'success': False,
-                'message': 'Invalid content type. Expected application/json',
-                'error': 'invalid_content_type'
+                'message': 'Invalid content type. Expected application/json'
             }), 400
         
         data = request.get_json()
         if not data:
-            logger.error("No JSON data received in request")
             return jsonify({
                 'success': False,
-                'message': 'No data received in request',
-                'error': 'missing_data'
+                'message': 'No data received in request'
             }), 400
             
-        # Log the received data structure
-        logger.info(f"Received data keys: {list(data.keys())}")
-        
-        # Check for image fields
+        # Check for required fields
         if 'image1' not in data or 'image2' not in data:
-            logger.error("Missing required image fields")
-            logger.error(f"Available fields: {list(data.keys())}")
             return jsonify({
                 'success': False,
-                'message': 'Missing required fields: image1 and image2',
-                'error': 'missing_images',
-                'received_fields': list(data.keys())
+                'message': 'Missing required fields: image1 and image2'
             }), 400
 
-        # Process both images with memory optimization
+        # Process images with memory optimization
         try:
             # Process first image
             image1_data = data['image1'].split(',')[1] if ',' in data['image1'] else data['image1']
@@ -314,11 +295,9 @@ def verify_face():
             gc.collect()
             
             if img1 is None or img2 is None:
-                logger.error("Failed to decode one or both images")
                 return jsonify({
                     'success': False,
-                    'message': 'Failed to decode images',
-                    'error': 'image_decode_failed'
+                    'message': 'Failed to decode images'
                 }), 400
                 
             # Convert BGR to RGB
@@ -333,7 +312,7 @@ def verify_face():
             result = DeepFace.verify(
                 rgb_img1, 
                 rgb_img2, 
-                model_name='Facenet',
+                model_name='Facenet',  # Use only Facenet for faster processing
                 detector_backend='skip',  # Skip face detection for self-comparison
                 enforce_detection=False,  # Don't enforce face detection
                 distance_metric='cosine'  # Use cosine distance for better performance
@@ -366,25 +345,21 @@ def verify_face():
                 return jsonify({
                     'success': False,
                     'message': 'No face detected in one or both images',
-                    'error': 'no_face_detected',
                     'matchPercentage': 0,
                     'isMatch': False
                 }), 400
             return jsonify({
                 'success': False,
                 'message': f'Error processing images: {str(e)}',
-                'error': 'image_processing_error',
                 'matchPercentage': 0,
                 'isMatch': False
             }), 400
             
     except Exception as e:
         logger.error(f"Verification error: {str(e)}")
-        logger.error(f"Request data: {str(data)}")
         return jsonify({
             'success': False,
             'message': f'Error verifying faces: {str(e)}',
-            'error': 'verification_error',
             'matchPercentage': 0,
             'isMatch': False
         }), 500
@@ -642,15 +617,26 @@ except Exception as e:
 
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
+    # Initialize models at startup
+    try:
+        if not initialize_models():
+            logger.error("Failed to initialize models at startup")
+            raise Exception("Failed to initialize face verification models")
+        models_initialized = True
+        logger.info("Models initialized successfully at startup")
+    except Exception as e:
+        logger.error(f"Error during model initialization: {str(e)}")
+        models_initialized = False
+
     # Get port from environment variable (Render will set this)
     port = int(os.environ.get('PORT', 10000))
     host = '0.0.0.0'  # Important for Docker - listen on all interfaces
     
-    logging.info(f"Starting server on {host}:{port}...")
-    logging.info(f"Environment variables:")
-    logging.info(f"PORT: {port}")
-    logging.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
-    logging.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
+    logger.info(f"Starting server on {host}:{port}...")
+    logger.info(f"Environment variables:")
+    logger.info(f"PORT: {port}")
+    logger.info(f"PYTHON_SERVICE_URL: {os.environ.get('PYTHON_SERVICE_URL')}")
+    logger.info(f"BACKEND_API_KEY: {os.environ.get('BACKEND_API_KEY')}")
     
     # Run the server with production settings
     app.run(
