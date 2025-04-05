@@ -28,8 +28,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies with specific versions
-RUN pip install --no-cache-dir \
-    tensorflow==2.10.0 \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    tensorflow==2.15.0 \
     deepface==0.0.79 \
     opencv-python-headless==4.8.1.78 \
     numpy==1.24.3 \
