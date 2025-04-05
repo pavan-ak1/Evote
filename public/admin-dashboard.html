@@ -1269,7 +1269,7 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                     userInput.value = '';
                     
                     // Send to backend
-                    fetch('/api/chat', {
+                    fetch('/api/chatbot', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -1280,9 +1280,9 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            addMessage('bot', data.response);
+                            addMessage('bot', data.reply);
                         } else {
-                            addMessage('bot', 'Sorry, I encountered an error. Please try again.');
+                            addMessage('bot', data.message || 'Sorry, I encountered an error. Please try again.');
                         }
                     })
                     .catch(error => {
@@ -1303,8 +1303,16 @@ ${voter.timeSlot ? `Time Slot: ${formatDateTime(voter.timeSlot.date, voter.timeS
                 messageContent.style.maxWidth = '80%';
                 messageContent.style.marginLeft = sender === 'user' ? 'auto' : '0';
                 messageContent.style.marginRight = sender === 'user' ? '0' : 'auto';
+                messageContent.style.whiteSpace = 'pre-line';
                 
-                messageContent.textContent = message;
+                // Convert markdown-style formatting to HTML
+                let formattedMessage = message
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic text
+                    .replace(/\n\s*[-*]\s/g, '\n• ') // Convert dashes to bullets
+                    .replace(/\n\s*\d+\.\s/g, '\n$&'); // Preserve numbered lists
+                
+                messageContent.innerHTML = formattedMessage;
                 messageDiv.appendChild(messageContent);
                 chatMessages.appendChild(messageDiv);
                 
