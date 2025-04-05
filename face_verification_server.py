@@ -46,7 +46,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 # Create temp directory
 temp_dir = os.path.join(os.getcwd(), 'temp')
@@ -54,7 +54,7 @@ if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
     logger.info(f"Created temp directory: {temp_dir}")
 
-app = Flask(_name_)
+app = Flask(__name__)
 # Configure CORS with specific origins
 CORS(app, resources={
     r"/*": {
