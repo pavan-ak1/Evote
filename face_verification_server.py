@@ -85,7 +85,7 @@ BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 
 # Global variables for memory management
 request_queue = Queue(maxsize=1)  # Limit concurrent requests
-models_initialized = False
+models_initialized = False  # Global variable for model initialization status
 model_lock = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=1)  # Single worker thread pool
 
@@ -159,6 +159,7 @@ def initialize_models():
 def process_request(func):
     """Decorator to handle request queuing and memory management"""
     def wrapped(*args, **kwargs):
+        global models_initialized  # Add global declaration
         try:
             # Wait for queue slot with timeout
             try:
@@ -173,12 +174,15 @@ def process_request(func):
             # Initialize models if needed
             if not models_initialized:
                 with model_lock:
-                    if not models_initialized and not initialize_models():
-                        return jsonify({
-                            'success': False,
-                            'message': 'Service is initializing, please try again in a few seconds'
-                        }), 503
-                    models_initialized = True
+                    if not models_initialized:
+                        logger.info("Initializing models...")
+                        if not initialize_models_at_startup():
+                            return jsonify({
+                                'success': False,
+                                'message': 'Service is initializing, please try again in a few seconds'
+                            }), 503
+                        models_initialized = True
+                        logger.info("Models initialized successfully")
             
             # Process request in thread pool with request context
             with app.app_context():
@@ -195,6 +199,7 @@ def process_request(func):
                 
         except Exception as e:
             logger.error(f"Request processing error: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({
                 'success': False,
                 'message': str(e)
@@ -643,8 +648,8 @@ def check_face_quality(image):
     
     return True, "Image quality is good"
 
-# Initialize models at startup
 def initialize_models_at_startup():
+    """Initialize models with minimal settings"""
     try:
         logger.info("Starting model initialization...")
         
@@ -658,13 +663,26 @@ def initialize_models_at_startup():
         tf.config.threading.set_inter_op_parallelism_threads(1)
         tf.config.threading.set_intra_op_parallelism_threads(1)
         
-        # Initialize DeepFace models
-        DeepFace.build_model("Facenet")
-        detector_backend = 'skip'
-        DeepFace.extract_faces(img_path=np.zeros([16, 16, 3]), target_size=(16, 16), detector_backend=detector_backend)
-        
-        logger.info("Models initialized successfully at startup")
-        return True
+        # Initialize DeepFace models with minimal settings
+        try:
+            # First try to load from cache
+            model = DeepFace.build_model("Facenet")
+            if model is None:
+                raise Exception("Failed to load model from cache")
+            
+            # Test with minimal image
+            test_image = np.zeros((16, 16, 3), dtype=np.uint8)
+            DeepFace.extract_faces(img_path=test_image, target_size=(16, 16), detector_backend='skip')
+            
+            logger.info("Models initialized successfully from cache")
+            return True
+        except Exception as e:
+            logger.warning(f"Cache load failed, downloading models: {str(e)}")
+            # If cache fails, download with minimal settings
+            DeepFace.build_model("Facenet", model_name="Facenet", detector_backend="skip")
+            logger.info("Models downloaded and initialized successfully")
+            return True
+            
     except Exception as e:
         logger.error(f"Error initializing models: {str(e)}")
         logger.error(traceback.format_exc())
@@ -673,7 +691,7 @@ def initialize_models_at_startup():
 # Only run the Flask development server if this script is run directly
 if __name__ == '__main__':
     try:
-        # Initialize models
+        # Initialize models with minimal settings
         if not initialize_models_at_startup():
             logger.error("Failed to initialize models at startup")
             raise Exception("Failed to initialize face verification models")
@@ -717,10 +735,13 @@ if __name__ == '__main__':
 @process_request
 def upload_photo():
     try:
+        logger.info("Received upload-photo request")
+        
         if request.method == 'OPTIONS':
             return jsonify({'status': 'ok'}), 200
 
         if request.content_type != 'application/json':
+            logger.error(f"Invalid content type: {request.content_type}")
             return jsonify({
                 'success': False,
                 'message': 'Invalid content type. Expected application/json'
@@ -728,6 +749,7 @@ def upload_photo():
 
         data = request.get_json()
         if not data or 'image' not in data:
+            logger.error("No image data in request")
             return jsonify({
                 'success': False,
                 'message': 'No image data received'
@@ -749,7 +771,9 @@ def upload_photo():
             
             # Validate base64 data
             try:
-                base64.b64decode(image_data)
+                decoded_data = base64.b64decode(image_data)
+                if len(decoded_data) == 0:
+                    raise ValueError("Empty image data")
             except Exception as e:
                 logger.error(f"Invalid base64 data: {str(e)}")
                 return jsonify({
@@ -758,6 +782,7 @@ def upload_photo():
                 }), 400
 
             # Upload to Cloudinary
+            logger.info("Uploading to Cloudinary...")
             cloudinary_response = requests.post(
                 f'https://api.cloudinary.com/v1_1/{cloud_name}/image/upload',
                 files={'file': f'data:image/jpeg;base64,{image_data}'},
@@ -773,10 +798,12 @@ def upload_photo():
                 logger.error(f"Cloudinary upload failed: {cloudinary_response.text}")
                 return jsonify({
                     'success': False,
-                    'message': 'Failed to upload image to Cloudinary'
+                    'message': 'Failed to upload image to Cloudinary',
+                    'error': cloudinary_response.text
                 }), 500
 
             cloudinary_data = cloudinary_response.json()
+            logger.info(f"Successfully uploaded to Cloudinary: {cloudinary_data.get('secure_url')}")
             
             # Clean up memory
             del image_data
@@ -798,14 +825,17 @@ def upload_photo():
             logger.error(f"Cloudinary request error: {str(e)}")
             return jsonify({
                 'success': False,
-                'message': 'Failed to connect to image service'
+                'message': 'Failed to connect to image service',
+                'error': str(e)
             }), 503
 
     except Exception as e:
         logger.error(f"Photo upload error: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': f'Error uploading photo: {str(e)}'
+            'message': f'Error uploading photo: {str(e)}',
+            'error': str(e)
         }), 500
     finally:
         manage_memory()
