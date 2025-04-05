@@ -65,6 +65,25 @@ CORS(app, resources={
     }
 })
 
+# Add explicit OPTIONS route handlers
+@app.route('/api/register', methods=['OPTIONS'])
+def handle_register_options():
+    response = jsonify({'message': 'OK'})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+@app.route('/api/verify', methods=['OPTIONS'])
+def handle_verify_options():
+    response = jsonify({'message': 'OK'})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
 # Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:3000')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
