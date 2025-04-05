@@ -64,13 +64,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const imageData = canvas.toDataURL("image/jpeg");
             
             // Send to backend for verification
-            const response = await fetch("/api/face/verify", {
+            const response = await fetch("https://voter-verify-face-ofgu.onrender.com/voter/face/verify", {
                 method: "POST",
-                headers: { 
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
-                body: JSON.stringify({ image: imageData })
+                body: JSON.stringify({
+                    image: imageData,
+                    userId: userId
+                })
             });
             
             if (!response.ok) {

@@ -3,7 +3,7 @@ const cloudinary = require('cloudinary').v2;
 
 class FaceVerificationService {
     constructor() {
-        this.baseURL = process.env.PYTHON_SERVICE_URL || 'https://voter-verify-face.onrender.com';
+        this.baseURL = process.env.PYTHON_SERVICE_URL || 'https://voter-verify-face-ofgu.onrender.com';
         this.maxRetries = 3;
         this.retryDelay = 5000; // 5 seconds
         this.initialized = false;
