@@ -61,17 +61,19 @@ CORS(app, resources={
         "origins": [
             "http://localhost:3000",
             "https://voter-verify-26-new.onrender.com",
-            "https://voter-verify-face-ofgu.onrender.com"
+            "https://voter-verify-face-ofgu.onrender.com",
+            "https://voter-verify-backend-ry3f.onrender.com"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
-        "max_age": 3600
+        "max_age": 3600,
+        "expose_headers": ["Content-Type", "Authorization"]
     }
 })
 
 # Backend API configuration with better error handling
-BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-26-new.onrender.com')
+BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-backend-ry3f.onrender.com')
 BACKEND_API_KEY = os.environ.get('BACKEND_API_KEY', 'your-api-key')
 
 # Global variables for memory management
