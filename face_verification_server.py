@@ -18,8 +18,8 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS, cross_origin  # <-- Added cross_origin import
+from flask import Flask, request, jsonify, send_file, send_from_directory
+from werkzeug.utils import secure_filename
 from deepface import DeepFace
 import numpy as np
 import base64
@@ -57,16 +57,6 @@ if not os.path.exists(temp_dir):
     logger.info(f"Created temp directory: {temp_dir}")
 
 app = Flask(__name__)
-# Configure CORS with specific settings
-CORS(app, resources={
-    r"/*": {
-        "origins": ["*"],  # Allow all origins in development
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
-        "supports_credentials": True,
-        "max_age": 3600
-    }
-})
 
 # Global OPTIONS handler
 @app.before_request
@@ -717,40 +707,56 @@ if __name__ == '__main__':
 # Modified endpoint below
 # =======================
 
+def add_cors_headers(response):
+    """Add CORS headers to the response"""
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response
+
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    return add_cors_headers(response)
+
 @app.route('/api/upload-photo', methods=['POST', 'OPTIONS'])
-@cross_origin(origins="*")
 @process_request
 def upload_photo():
     try:
         logger.info("Received upload-photo request")
         
         if request.method == 'OPTIONS':
-            return jsonify({'status': 'ok'}), 200
+            response = jsonify({'status': 'ok'})
+            return add_cors_headers(response)
 
         if request.content_type != 'application/json':
             logger.error(f"Invalid content type: {request.content_type}")
-            return jsonify({
+            response = jsonify({
                 'success': False,
                 'message': 'Invalid content type. Expected application/json'
-            }), 400
+            })
+            return add_cors_headers(response), 400
 
         data = request.get_json()
         if not data or 'image' not in data:
             logger.error("No image data in request")
-            return jsonify({
+            response = jsonify({
                 'success': False,
                 'message': 'No image data received'
-            }), 400
+            })
+            return add_cors_headers(response), 400
 
         # Validate Cloudinary credentials
         cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
         api_key = os.environ.get('CLOUDINARY_API_KEY')
         if not cloud_name or not api_key:
             logger.error("Missing Cloudinary credentials")
-            return jsonify({
+            response = jsonify({
                 'success': False,
                 'message': 'Server configuration error'
-            }), 500
+            })
+            return add_cors_headers(response), 500
 
         try:
             # Process image data
@@ -763,10 +769,11 @@ def upload_photo():
                     raise ValueError("Empty image data")
             except Exception as e:
                 logger.error(f"Invalid base64 data: {str(e)}")
-                return jsonify({
+                response = jsonify({
                     'success': False,
                     'message': 'Invalid image data format'
-                }), 400
+                })
+                return add_cors_headers(response), 400
 
             # Upload to Cloudinary
             logger.info("Uploading to Cloudinary...")
@@ -783,11 +790,12 @@ def upload_photo():
 
             if cloudinary_response.status_code != 200:
                 logger.error(f"Cloudinary upload failed: {cloudinary_response.text}")
-                return jsonify({
+                response = jsonify({
                     'success': False,
                     'message': 'Failed to upload image to Cloudinary',
                     'error': cloudinary_response.text
-                }), 500
+                })
+                return add_cors_headers(response), 500
 
             cloudinary_data = cloudinary_response.json()
             logger.info(f"Successfully uploaded to Cloudinary: {cloudinary_data.get('secure_url')}")
@@ -796,34 +804,38 @@ def upload_photo():
             del image_data, decoded_data
             gc.collect()
             
-            return jsonify({
+            response = jsonify({
                 'success': True,
                 'message': 'Photo uploaded successfully',
                 'imageUrl': cloudinary_data['secure_url']
             })
+            return add_cors_headers(response)
 
         except requests.exceptions.Timeout:
             logger.error("Cloudinary upload timed out")
-            return jsonify({
+            response = jsonify({
                 'success': False,
                 'message': 'Upload timed out. Please try again.'
-            }), 504
+            })
+            return add_cors_headers(response), 504
         except requests.exceptions.RequestException as e:
             logger.error(f"Cloudinary request error: {str(e)}")
-            return jsonify({
+            response = jsonify({
                 'success': False,
                 'message': 'Failed to connect to image service',
                 'error': str(e)
-            }), 503
+            })
+            return add_cors_headers(response), 503
 
     except Exception as e:
         logger.error(f"Photo upload error: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({
+        response = jsonify({
             'success': False,
             'message': f'Error uploading photo: {str(e)}',
             'error': str(e)
-        }), 500
+        })
+        return add_cors_headers(response), 500
     finally:
         manage_memory()
         tf.keras.backend.clear_session()
