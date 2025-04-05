@@ -136,7 +136,7 @@ def initialize_models():
         # Create a minimal test image
         test_image = np.zeros((16, 16, 3), dtype=np.uint8)
         
-        # Initialize only the most commonly used model
+        # Initialize only the Facenet model for faster startup and lower memory usage
         DeepFace.build_model("Facenet")
         
         # Initialize face detector with minimal settings
@@ -595,20 +595,12 @@ def check_face_quality(image):
 
 # Initialize models at startup
 try:
-    # Initialize DeepFace models
-    DeepFace.build_model("VGG-Face")
+    # Initialize only the Facenet model for faster startup and lower memory usage
     DeepFace.build_model("Facenet")
-    DeepFace.build_model("Facenet512")
-    DeepFace.build_model("OpenFace")
-    DeepFace.build_model("DeepFace")
-    DeepFace.build_model("DeepID")
-    DeepFace.build_model("ArcFace")
-    DeepFace.build_model("Dlib")
-    DeepFace.build_model("SFace")
     
-    # Initialize face detector
-    detector_backend = 'opencv'
-    DeepFace.extract_faces(img_path = np.zeros([224, 224, 3]), target_size = (224, 224), detector_backend = detector_backend)
+    # Initialize face detector with minimal settings
+    detector_backend = 'skip'  # Skip face detection for initialization
+    DeepFace.extract_faces(img_path = np.zeros([16, 16, 3]), target_size = (16, 16), detector_backend = detector_backend)
     
     logging.info("Models initialized successfully at startup")
 except Exception as e:

@@ -27,8 +27,17 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies with specific versions
+RUN pip install --no-cache-dir \
+    tensorflow==2.10.0 \
+    deepface==0.0.79 \
+    opencv-python-headless==4.8.1.78 \
+    numpy==1.24.3 \
+    pillow==10.0.0 \
+    psutil==5.9.8 \
+    flask==2.3.3 \
+    flask-cors==4.0.0 \
+    gunicorn==21.2.0
 
 # Final stage
 FROM python:3.11-slim
@@ -61,7 +70,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/pyth
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 # Create necessary directories
-RUN mkdir -p /app/deepface_weights/.deepface/weights
+RUN mkdir -p /app/deepface_weights/.deepface/weights /app/temp
 
 # Copy application code
 COPY . .
@@ -70,11 +79,22 @@ COPY . .
 ENV PORT=5001
 ENV PYTHONUNBUFFERED=1
 ENV DEEPFACE_HOME=/app/deepface_weights
+ENV CUDA_VISIBLE_DEVICES=-1
+ENV TF_CPP_MIN_LOG_LEVEL=2
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 
-# Create startup script
+# Create startup script with optimized Gunicorn settings
 RUN echo '#!/bin/bash\n\
 echo "Starting server on port $PORT..."\n\
-gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 face_verification_server:app\n\
+gunicorn --bind 0.0.0.0:$PORT \
+    --workers 1 \
+    --threads 4 \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --worker-class gthread \
+    --log-level info \
+    face_verification_server:app\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose the port
