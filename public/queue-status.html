@@ -3,62 +3,137 @@
 <head>
   <meta charset="UTF-8">
   <title>Queue Status</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f4f4;
-      padding: 20px;
-      text-align: center;
-    }
-    .container {
-      max-width: 600px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
-    }
-    .queue-status {
-      margin-top: 20px;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      background-color: #eef;
-    }
-    input[type="text"] {
-      font-size: 16px;
-      padding: 5px;
-      width: 80%;
-      margin-bottom: 10px;
-    }
-    button {
-      padding: 8px 12px;
-      font-size: 16px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-  </style>
+  <link rel="stylesheet" href="css/output.css">
+  
 </head>
-<body>
-  <div class="container">
-    <h1>Queue Status</h1>
-    <div>
-      <label for="slot-id-input">Enter Slot ID:</label><br>
-      <input type="text" id="slot-id-input" placeholder="Paste Slot ID here">
+<body class="flex flex-col bg-gradient-to-r to-blue-200 min-h-scren">
+  <header class="w-full bg-[#160C56] shadow-sm py-4 px-6">
+    <div class="mx-auto">
+        <div class="flex justify-between items-center">
+            <!-- Logo/Brand -->
+            <div class="flex items-center gap-3">
+                <div class="h-12 w-12">
+                <img src="img/Emblem_of_India.svg" alt="emblem" class="h-full w-full text-white filter invert">
+                </div>
+                <div class="text-3xl font-bold text-white">
+                Election Commission
+                </div>
+            </div>
+            
+            <!-- Desktop Navigation - Only visible on md screens and up -->
+            <nav class="hidden md:block">
+                <ul class="flex gap-8">
+                    <li>
+                        <a 
+                            href="index.html#home" 
+                            class="header-text"
+                        >
+                            Home
+                        </a>
+                    </li>
+                  
+                    <li>
+                        <a 
+                            href="index.html#contact" 
+                            class="header-text"
+                        >
+                            Contact
+                        </a>
+                    </li>
+                    
+                </ul>
+            </nav>
+            
+            <!-- Mobile menu button - Only visible on small screens -->
+            <button id="menu-toggle" class="md:hidden text-white focus:outline-none">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+        </div>
     </div>
-    <button id="view-queue">View Queue</button>
-    <div id="queue-status-container">
-      <p>Queue status will be displayed here.</p>
-    </div>
-    <button id="back-to-slots" style="margin-top: 20px;">Back to Slots</button>
-  </div>
+</header>
 
+<!-- Mobile Sidebar - Hidden by default -->
+<div id="mobile-sidebar" class="fixed top-0 left-0 w-64 h-full bg-gray-50 shadow-lg transform -translate-x-full transition-transform duration-300 ease-in-out z-50">
+    <div class=" p-6">
+        <!-- Close button -->
+        <button id="sidebar-close" class="absolute top-4 right-4 text-gray-600 focus:outline-none">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+                    <!-- Sidebar Logo -->
+        <div class="text-2xl font-semibold text-gray-800 mb-8">
+            Election Commission
+        </div>
+        
+        
+        <!-- Sidebar Navigation -->
+        <nav>
+            <ul class="space-y-4">
+                <li>
+                    <a 
+                        href="index.html#home" 
+                        class="mobile-header"
+                    >
+                        Home
+                    </a>
+                </li>
+                
+                <li>
+                    <a 
+                        href="/index.html#contact" 
+                        class="mobile-header"
+                    >
+                        Contact
+                    </a>
+                </li>
+                
+            </ul>
+        </nav>
+    </div>
+</div>
+<div class="flex flex-col flex-grow max-w-3xl mx-auto bg-white p-5 rounded-lg shadow-md my-8">
+  <h1 class="text-center text-2xl font-bold mb-6">Queue Status</h1>
+  
+  <div class="mb-4">
+    <label for="slot-id-input" class="block mb-2 font-medium">Enter Slot ID:</label>
+    <input 
+      type="text" 
+      id="slot-id-input" 
+      placeholder="Paste Slot ID here" 
+      class="w-full p-2.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+  </div>
+  
+  <button 
+    id="view-queue" 
+    class="bg-blue-600 hover:bg-blue-800 text-white py-2 px-4 rounded w-full mb-5 transition duration-200"
+  >
+    View Queue
+  </button>
+  
+  <div 
+    id="queue-status-container" 
+    class="mt-4 p-4 border border-gray-300 rounded bg-blue-50 min-h-24"
+  >
+    <p class="text-gray-600">Queue status will be displayed here.</p>
+  </div>
+  
+  <button 
+    id="back-to-slots" 
+    class="mt-5 bg-gray-500 hover:bg-gray-700 text-white py-2 px-4 rounded w-full transition duration-200"
+  >
+    Back to Slots
+  </button>
+</div>
+
+<footer class="bg-[#160C56] mt-19 text-white text-center py-4">
+  <p>&copy; 2024 E-Voting System. All rights reserved.</p>
+</footer>
+
+<script src="js/header-functionality.js"></script>
   <script>
     async function fetchQueueStatus(slotId) {
   try {

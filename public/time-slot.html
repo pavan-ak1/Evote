@@ -3,392 +3,407 @@
 <head>
   <meta charset="UTF-8">
   <title>Time Slot Booking</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f4f4;
-      padding: 20px;
-    }
-    .container {
-      max-width: 800px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
-    }
-    h1, h2 {
-      text-align: center;
-    }
-    .slot, .booked-slot {
-      border: 1px solid #ddd;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 5px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .slot.booked, .booked-slot.booked {
-      background-color: #f8d7da;
-      color: #721c24;
-    }
-    .slot.available, .booked-slot.available {
-      background-color: #d4edda;
-      color: #155724;
-    }
-    button {
-      padding: 8px 12px;
-      font-size: 16px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button.book-btn {
-      background-color: #007bff;
-      color: white;
-    }
-    button.book-btn:hover {
-      background-color: #0056b3;
-    }
-    .date-picker,
-    .section {
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    input[type="date"] {
-      font-size: 16px;
-      padding: 5px;
-    }
-    .loading {
-      text-align: center;
-      font-size: 18px;
-      color: #555;
-    }
-    .queue-status,
-    .booked-status {
-      margin-top: 20px;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      background-color: #eef;
-    }
-    .action-buttons {
-      text-align: center;
-      margin-top: 20px;
-    }
-    .action-buttons button {
-      margin: 0 5px;
-    }
-    .success-message {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background-color: #28a745;
-      color: white;
-      padding: 15px 25px;
-      border-radius: 5px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      z-index: 1000;
-      display: none;
-      transition: opacity 0.3s ease-in-out;
-    }
-  </style>
+  <link rel="stylesheet" href="css/output.css">
 </head>
-<body>
-  <!-- Add success message container -->
-  <div id="success-message" class="success-message"></div>
-  
-  <div class="container">
-    <h1>Time Slot Booking</h1>
-    <div class="date-picker">
-      <label for="slot-date">Select Date:</label>
-      <input type="date" id="slot-date">
-      <button id="fetch-slots">Fetch Slots</button>
+<body class="flex flex-col bg-gradient-to-r from-slate-100 to-blue-200 min-h-screen">
+
+  <header class="w-full bg-[#160C56] shadow-sm py-4 px-6">
+    <div class="mx-auto">
+        <div class="flex justify-between items-center">
+            <!-- Logo/Brand -->
+            <div class="flex items-center gap-3">
+                <div class="h-12 w-12">
+                <img src="img/Emblem_of_India.svg" alt="emblem" class="h-full w-full text-white filter invert">
+                </div>
+                <div class="text-3xl font-bold text-white">
+                Election Commission
+                </div>
+            </div>
+            
+            <!-- Desktop Navigation - Only visible on md screens and up -->
+            <nav class="hidden md:block">
+                <ul class="flex gap-8">
+                    <li>
+                        <a 
+                            href="index.html#home" 
+                            class="header-text"
+                        >
+                            Home
+                        </a>
+                    </li>
+                  
+                    <li>
+                        <a 
+                            href="index.html#contact" 
+                            class="header-text"
+                        >
+                            Contact
+                        </a>
+                    </li>
+                    
+                </ul>
+            </nav>
+            
+            <!-- Mobile menu button - Only visible on small screens -->
+            <button id="menu-toggle" class="md:hidden text-white focus:outline-none">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+        </div>
     </div>
+</header>
+
+<!-- Mobile Sidebar - Hidden by default -->
+<div id="mobile-sidebar" class="fixed top-0 left-0 w-64 h-full bg-gray-50 shadow-lg transform -translate-x-full transition-transform duration-300 ease-in-out z-50">
+    <div class=" p-6">
+        <!-- Close button -->
+        <button id="sidebar-close" class="absolute top-4 right-4 text-gray-600 focus:outline-none">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+                    <!-- Sidebar Logo -->
+        <div class="text-2xl font-semibold text-gray-800 mb-8">
+            Election Commission
+        </div>
+        
+        
+        <!-- Sidebar Navigation -->
+        <nav>
+            <ul class="space-y-4">
+                <li>
+                    <a 
+                        href="index.html#home" 
+                        class="mobile-header"
+                    >
+                        Home
+                    </a>
+                </li>
+                
+                <li>
+                    <a 
+                        href="/index.html#contact" 
+                        class="mobile-header"
+                    >
+                        Contact
+                    </a>
+                </li>
+                
+            </ul>
+        </nav>
+    </div>
+</div>
+  <div id="success-message" class="fixed top-5 right-5 bg-green-600 text-white py-4 px-6 rounded shadow-md z-10 hidden transition-opacity duration-300"></div>
+  
+  <div class="mb-auto max-w-3xl mx-auto mt-auto bg-white p-5 rounded-lg shadow-md">
+    <h1 class="text-center text-2xl font-bold mb-4">Time Slot Booking</h1>
+    
+    <div class="mb-5 text-center">
+      <label for="slot-date" class="mr-2">Select Date:</label>
+      <input type="date" id="slot-date" class="text-base p-1.5 border border-gray-300 rounded">
+      <button id="fetch-slots" class="ml-2 bg-blue-500 hover:bg-blue-700 text-white py-2 px-3 rounded">Fetch Slots</button>
+    </div>
+    
     <div id="slots-container"></div>
     
     <!-- Section for booked slots for this voter -->
-    <div id="booked-slots-container" class="booked-status"></div>
+    <div id="booked-slots-container" class="mt-5 p-2.5 border border-gray-300 rounded bg-blue-50"></div>
     
     <!-- Action buttons -->
-    <div class="action-buttons">
-      <button id="view-queue-status">View Queue Status</button>
-      <button id="back-dashboard">Back to Dashboard</button>
+    <div class="text-center mt-5">
+      <button id="view-queue-status" class="bg-gray-500 hover:bg-gray-700 text-white py-2 px-3 rounded mx-1.5">View Queue Status</button>
+      <button id="back-dashboard" class="bg-gray-500 hover:bg-gray-700 text-white py-2 px-3 rounded mx-1.5">Back to Dashboard</button>
     </div>
   </div>
 
+  <footer class="bg-[#160C56] text-white text-center py-4">
+    <p>&copy; 2024 E-Voting System. All rights reserved.</p>
+  </footer>
+  <script src="js/header-functionality.js"></script>
   <script>
     // Global variables
-    let bookedSlots = [];
+let bookedSlots = [];
 
-    // Retrieve stored values from localStorage (make sure your login saves these)
-    const voterId = localStorage.getItem("voterId");
-    const phoneNumber = localStorage.getItem("phoneNumber");
+// Retrieve stored values from localStorage (make sure your login saves these)
+const voterId = localStorage.getItem("voterId");
+const phoneNumber = localStorage.getItem("phoneNumber");
 
-    // If these are not set, you might need to redirect the user to log in again
-    // if (!voterId || !phoneNumber) {
-    //   alert("User details missing. Please log in.");
-    //   window.location.href = "/login.html";
-    // }
+// If these are not set, you might need to redirect the user to log in again
+// if (!voterId || !phoneNumber) {
+//   alert("User details missing. Please log in.");
+//   window.location.href = "/login.html";
+// }
 
-    // Set default date to today (YYYY-MM-DD)
-    const slotDateInput = document.getElementById("slot-date");
-    const today = new Date().toISOString().split("T")[0];
-    slotDateInput.value = today;
+// Set default date to today (YYYY-MM-DD)
+const slotDateInput = document.getElementById("slot-date");
+const today = new Date().toISOString().split("T")[0];
+slotDateInput.value = today;
 
-    /***********************************
-     * FETCH AVAILABLE TIME SLOTS
-     ***********************************/
-    async function fetchSlots(date) {
-      const slotsContainer = document.getElementById("slots-container");
-      slotsContainer.innerHTML = `<p class="loading">Loading slots...</p>`;
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          window.location.href = "/login.html";
-          return;
-        }
+/***********************************
+ * FETCH AVAILABLE TIME SLOTS
+ ***********************************/
+async function fetchSlots(date) {
+  const slotsContainer = document.getElementById("slots-container");
+  slotsContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading slots...</p>`;
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login.html";
+      return;
+    }
 
-        const response = await fetch(`/api/slots/available?date=${date}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            window.location.href = "/login.html";
-            return;
-          }
-          throw new Error("Failed to fetch time slots.");
-        }
-
-        const slots = await response.json();
-        console.log("Fetched slots:", slots);
-        displaySlots(slots);
-      } catch (error) {
-        console.error("Error fetching slots:", error);
-        slotsContainer.innerHTML = "<p style='color: red;'>Error fetching time slots.</p>";
+    const response = await fetch(`/api/slots/available?date=${date}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`
       }
-    }
-
-    /***********************************
-     * DISPLAY AVAILABLE SLOTS
-     ***********************************/
-    function displaySlots(slots) {
-      const slotsContainer = document.getElementById("slots-container");
-      slotsContainer.innerHTML = "";
-      if (!slots.length) {
-        slotsContainer.innerHTML = "<p>No slots available for this date.</p>";
-        return;
-      }
-      slots.forEach(slot => {
-        const slotDiv = document.createElement("div");
-        slotDiv.classList.add("slot");
-        // Mark as "booked" if capacity is reached
-        slotDiv.classList.add(slot.bookedVoters.length >= slot.maxCapacity ? "booked" : "available");
-
-        // Build the HTML for each slot
-        slotDiv.innerHTML = `
-          <div>
-            <strong>${slot.startTime} - ${slot.endTime}</strong><br>
-            Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}
-          </div>
-          <div>
-            <button class="book-btn" data-slot-id="${slot._id}" ${
-              slot.bookedVoters.length >= slot.maxCapacity ? "disabled" : ""
-            }>
-              ${slot.bookedVoters.length >= slot.maxCapacity ? "Slot Full" : "Book Slot"}
-            </button>
-          </div>
-        `;
-        slotsContainer.appendChild(slotDiv);
-      });
-
-      // Attach event listeners to all non-disabled "Book Slot" buttons
-      document.querySelectorAll(".book-btn:not([disabled])").forEach(button => {
-        button.addEventListener("click", bookSlot);
-      });
-    }
-
-    /***********************************
-     * BOOK A TIME SLOT
-     ***********************************/
-    async function bookSlot(event) {
-      const button = event.target;
-      const slotId = button.getAttribute("data-slot-id");
-      button.disabled = true;
-      button.innerText = "Booking...";
-
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          window.location.href = "/login.html";
-          return;
-        }
-
-        const response = await fetch("/api/slots/book", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({ slotId })
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            window.location.href = "/login.html";
-            return;
-          }
-          const data = await response.json();
-          throw new Error(data.error || "Failed to book slot");
-        }
-
-        const data = await response.json();
-        alert("Slot booked successfully!");
-        await fetchBookedSlots();
-        await fetchSlots(slotDateInput.value);
-      } catch (error) {
-        console.error("Error booking slot:", error);
-        if (error.message.includes("Authentication failed")) {
-          window.location.href = "/login.html";
-        } else {
-          alert(error.message);
-        }
-        button.disabled = false;
-        button.innerText = "Book Slot";
-      }
-    }
-
-    /***********************************
-     * UPDATE BOOKED SLOTS DISPLAY
-     ***********************************/
-    function updateBookedSlotsDisplay() {
-      const bookedContainer = document.getElementById("booked-slots-container");
-      if (!bookedSlots || bookedSlots.length === 0) {
-        bookedContainer.innerHTML = "<p>You have no booked slots.</p>";
-        return;
-      }
-
-      bookedContainer.innerHTML = "<h3>Your Booked Slots:</h3>";
-      bookedSlots.forEach(slot => {
-        const slotDiv = document.createElement("div");
-        slotDiv.classList.add("booked-slot");
-        slotDiv.classList.add("booked");
-        slotDiv.innerHTML = `
-          <div>
-            <strong>Date:</strong> ${slot.date}<br>
-            <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
-            <strong>Status:</strong> Confirmed
-          </div>
-          <div>
-            <button class="book-btn" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
-          </div>
-        `;
-        bookedContainer.appendChild(slotDiv);
-      });
-    }
-
-    /***********************************
-     * FETCH BOOKED SLOTS FOR THE VOTER
-     ***********************************/
-    async function fetchBookedSlots() {
-      const bookedContainer = document.getElementById("booked-slots-container");
-      bookedContainer.innerHTML = `<p class="loading">Loading booked slots...</p>`;
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          window.location.href = "/login.html";
-          return;
-        }
-
-        const response = await fetch("/api/slots/booked", {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            window.location.href = "/login.html";
-            return;
-          }
-          throw new Error("Failed to fetch booked slots");
-        }
-
-        const data = await response.json();
-        bookedSlots = data;
-        updateBookedSlotsDisplay();
-      } catch (error) {
-        console.error("Error fetching booked slots:", error);
-        if (error.message.includes("Authentication failed")) {
-          window.location.href = "/login.html";
-        }
-      }
-    }
-
-    /***********************************
-     * COPY SLOT ID FUNCTION
-     ***********************************/
-    function copySlotID(slotId) {
-      navigator.clipboard
-        .writeText(slotId)
-        .then(() => {
-          const successMessage = document.getElementById('success-message');
-          successMessage.textContent = `Slot ID copied: ${slotId}`;
-          successMessage.style.display = 'block';
-          successMessage.style.opacity = '1';
-          
-          // Hide the message after 3 seconds
-          setTimeout(() => {
-            successMessage.style.opacity = '0';
-            setTimeout(() => {
-              successMessage.style.display = 'none';
-            }, 300);
-          }, 3000);
-        })
-        .catch(err => console.error("Failed to copy:", err));
-    }
-
-    /***********************************
-     * NAVIGATE TO QUEUE STATUS PAGE
-     ***********************************/
-    document.getElementById("view-queue-status").addEventListener("click", () => {
-      window.location.href = "/queue-status.html";
     });
 
-    /***********************************
-     * INITIALIZE EVENT LISTENERS ON LOAD
-     ***********************************/
-    document.addEventListener("DOMContentLoaded", () => {
-      // Check authentication first
-      const token = localStorage.getItem("token");
-      if (!token) {
-        alert("Please log in to access time slot booking");
+    if (!response.ok) {
+      if (response.status === 401) {
         window.location.href = "/login.html";
         return;
       }
+      throw new Error("Failed to fetch time slots.");
+    }
 
-      // Set default date to today (YYYY-MM-DD)
-      const slotDateInput = document.getElementById("slot-date");
-      const today = new Date().toISOString().split("T")[0];
-      slotDateInput.value = today;
+    const slots = await response.json();
+    console.log("Fetched slots:", slots);
+    displaySlots(slots);
+  } catch (error) {
+    console.error("Error fetching slots:", error);
+    slotsContainer.innerHTML = "<p class='text-red-500'>Error fetching time slots.</p>";
+  }
+}
 
-      // Fetch initial data
-      fetchSlots(today);
-      fetchBookedSlots();
+/***********************************
+ * DISPLAY AVAILABLE SLOTS
+ ***********************************/
+function displaySlots(slots) {
+  const slotsContainer = document.getElementById("slots-container");
+  slotsContainer.innerHTML = "";
+  if (!slots.length) {
+    slotsContainer.innerHTML = "<p class='text-center py-3'>No slots available for this date.</p>";
+    return;
+  }
+  slots.forEach(slot => {
+    const slotDiv = document.createElement("div");
+    // Apply Tailwind classes instead of custom classes
+    slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center";
+    
+    // Add status class
+    if (slot.bookedVoters.length >= slot.maxCapacity) {
+      slotDiv.classList.add("bg-red-100", "text-red-800"); // Booked
+    } else {
+      slotDiv.classList.add("bg-green-100", "text-green-800"); // Available
+    }
 
-      // Add event listeners
-      document.getElementById("fetch-slots").addEventListener("click", () => {
-        fetchSlots(slotDateInput.value);
-      });
+    // Build the HTML for each slot
+    slotDiv.innerHTML = `
+      <div>
+        <strong>${slot.startTime} - ${slot.endTime}</strong><br>
+        Booked: ${slot.bookedVoters.length} / ${slot.maxCapacity}
+      </div>
+      <div>
+        <button class="${slot.bookedVoters.length >= slot.maxCapacity 
+          ? 'bg-gray-400 cursor-not-allowed' 
+          : 'bg-blue-600 hover:bg-blue-800'} text-white py-2 px-3 rounded" 
+          data-slot-id="${slot._id}" ${
+          slot.bookedVoters.length >= slot.maxCapacity ? "disabled" : ""
+        }>
+          ${slot.bookedVoters.length >= slot.maxCapacity ? "Slot Full" : "Book Slot"}
+        </button>
+      </div>
+    `;
+    slotsContainer.appendChild(slotDiv);
+  });
 
-      document.getElementById("back-dashboard").addEventListener("click", () => {
-        window.location.href = "/dashboard.html";
-      });
+  // Attach event listeners to all non-disabled "Book Slot" buttons
+  document.querySelectorAll("button[data-slot-id]:not([disabled])").forEach(button => {
+    button.addEventListener("click", bookSlot);
+  });
+}
+
+/***********************************
+ * BOOK A TIME SLOT
+ ***********************************/
+async function bookSlot(event) {
+  const button = event.target;
+  const slotId = button.getAttribute("data-slot-id");
+  button.disabled = true;
+  button.innerText = "Booking...";
+  button.classList.add("bg-gray-400");
+  button.classList.remove("bg-blue-600", "hover:bg-blue-800");
+
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    const response = await fetch("/api/slots/book", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ slotId })
     });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      const data = await response.json();
+      throw new Error(data.error || "Failed to book slot");
+    }
+
+    const data = await response.json();
+    alert("Slot booked successfully!");
+    await fetchBookedSlots();
+    await fetchSlots(slotDateInput.value);
+  } catch (error) {
+    console.error("Error booking slot:", error);
+    if (error.message.includes("Authentication failed")) {
+      window.location.href = "/login.html";
+    } else {
+      alert(error.message);
+    }
+    button.disabled = false;
+    button.innerText = "Book Slot";
+    button.classList.remove("bg-gray-400");
+    button.classList.add("bg-blue-600", "hover:bg-blue-800");
+  }
+}
+
+/***********************************
+ * UPDATE BOOKED SLOTS DISPLAY
+ ***********************************/
+function updateBookedSlotsDisplay() {
+  const bookedContainer = document.getElementById("booked-slots-container");
+  if (!bookedSlots || bookedSlots.length === 0) {
+    bookedContainer.innerHTML = "<p class='text-center py-2'>You have no booked slots.</p>";
+    return;
+  }
+
+  bookedContainer.innerHTML = "<h3 class='font-bold text-lg mb-3'>Your Booked Slots:</h3>";
+  bookedSlots.forEach(slot => {
+    const slotDiv = document.createElement("div");
+    slotDiv.className = "border border-gray-300 p-2.5 my-2.5 rounded flex justify-between items-center bg-red-100 text-red-800";
+    slotDiv.innerHTML = `
+      <div>
+        <strong>Date:</strong> ${slot.date}<br>
+        <strong>Time:</strong> ${slot.startTime} - ${slot.endTime}<br>
+        <strong>Status:</strong> Confirmed
+      </div>
+      <div>
+        <button class="bg-blue-600 hover:bg-blue-800 text-white py-2 px-3 rounded" onclick="copySlotID('${slot._id}')">Copy Slot ID</button>
+      </div>
+    `;
+    bookedContainer.appendChild(slotDiv);
+  });
+}
+
+/***********************************
+ * FETCH BOOKED SLOTS FOR THE VOTER
+ ***********************************/
+async function fetchBookedSlots() {
+  const bookedContainer = document.getElementById("booked-slots-container");
+  bookedContainer.innerHTML = `<p class="text-center text-lg text-gray-600">Loading booked slots...</p>`;
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    const response = await fetch("/api/slots/booked", {
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      throw new Error("Failed to fetch booked slots");
+    }
+
+    const data = await response.json();
+    bookedSlots = data;
+    updateBookedSlotsDisplay();
+  } catch (error) {
+    console.error("Error fetching booked slots:", error);
+    if (error.message.includes("Authentication failed")) {
+      window.location.href = "/login.html";
+    }
+  }
+}
+
+/***********************************
+ * COPY SLOT ID FUNCTION
+ ***********************************/
+function copySlotID(slotId) {
+  navigator.clipboard
+    .writeText(slotId)
+    .then(() => {
+      const successMessage = document.getElementById('success-message');
+      successMessage.textContent = `Slot ID copied: ${slotId}`;
+      successMessage.style.display = 'block';
+      successMessage.style.opacity = '1';
+      
+      // Hide the message after 3 seconds
+      setTimeout(() => {
+        successMessage.style.opacity = '0';
+        setTimeout(() => {
+          successMessage.style.display = 'none';
+        }, 300);
+      }, 3000);
+    })
+    .catch(err => console.error("Failed to copy:", err));
+}
+
+/***********************************
+ * NAVIGATE TO QUEUE STATUS PAGE
+ ***********************************/
+document.getElementById("view-queue-status").addEventListener("click", () => {
+  window.location.href = "/queue-status.html";
+});
+
+/***********************************
+ * INITIALIZE EVENT LISTENERS ON LOAD
+ ***********************************/
+document.addEventListener("DOMContentLoaded", () => {
+  // Check authentication first
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Please log in to access time slot booking");
+    window.location.href = "/login.html";
+    return;
+  }
+
+  // Set default date to today (YYYY-MM-DD)
+  const slotDateInput = document.getElementById("slot-date");
+  const today = new Date().toISOString().split("T")[0];
+  slotDateInput.value = today;
+
+  // Fetch initial data
+  fetchSlots(today);
+  fetchBookedSlots();
+
+  // Add event listeners
+  document.getElementById("fetch-slots").addEventListener("click", () => {
+    fetchSlots(slotDateInput.value);
+  });
+
+  document.getElementById("back-dashboard").addEventListener("click", () => {
+    window.location.href = "/dashboard.html";
+  });
+});
   </script>
 </body>
 </html>
