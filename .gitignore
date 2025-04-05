@@ -64,6 +64,8 @@ weights/
 *.onnx
 *.mlmodel
 *.mlpackage
+facenet_keras.h5
+deepface_weights/.deepface/weights/
 
 # Logs
 logs/
