@@ -169,6 +169,8 @@
         registerButton.disabled = true;
         registerButton.textContent = 'Processing...';
         messageDiv.textContent = '';
+        messageDiv.style.display = 'block';
+        messageDiv.className = 'text-blue-500';
 
         // Get the captured image
         const video = document.getElementById('video');
@@ -185,13 +187,17 @@
         // Get image data as base64
         const imageData = canvas.toDataURL('image/jpeg');
         console.log('Image captured, length:', imageData.length);
+        console.log('User ID:', userId);
 
         // Register the face
         const response = await fetch('/voter/face/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 
+            'Content-Type': 'application/json', 
+            'Authorization': `Bearer ${token}` 
+          },
           body: JSON.stringify({ 
-            image: imageData,
+            faceImage: imageData,
             userId: userId 
           })
         });
