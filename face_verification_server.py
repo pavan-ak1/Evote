@@ -64,13 +64,22 @@ CORS(app, resources={
             "https://voter-verify-face-ofgu.onrender.com",
             "https://voter-verify-backend-ry3f.onrender.com"
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
         "expose_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
         "max_age": 3600
     }
 })
+
+# Add global error handler for CORS
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'https://voter-verify-backend-ry3f.onrender.com')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Backend API configuration with better error handling
 BACKEND_URL = os.environ.get('BACKEND_URL', 'https://voter-verify-backend-ry3f.onrender.com')
@@ -163,11 +172,12 @@ def process_request(func):
                     'message': 'Service is initializing, please try again in a few seconds'
                 }), 503
             
-            # Process request in thread pool
-            future = executor.submit(func, *args, **kwargs)
-            result = future.result(timeout=30)  # 30 second timeout
-            
-            return result
+            # Process request in thread pool with request context
+            with app.app_context():
+                future = executor.submit(func, *args, **kwargs)
+                result = future.result(timeout=30)  # 30 second timeout
+                return result
+                
         except Exception as e:
             logger.error(f"Request processing error: {str(e)}")
             return jsonify({
@@ -375,6 +385,10 @@ def register_face():
     try:
         # Log the incoming request
         logger.info("Received registration request")
+        
+        # Handle OPTIONS request
+        if request.method == 'OPTIONS':
+            return jsonify({'status': 'ok'}), 200
         
         # Check content type
         if request.content_type != 'application/json':
